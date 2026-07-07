@@ -1,12 +1,23 @@
 import { formatCurrency, formatDateTime } from '../../utils/helpers';
-import { X, Printer, Download, CheckCircle } from 'lucide-react';
+import { Printer, CheckCircle } from 'lucide-react';
 
 export default function ReceiptModal({ sale, onClose }) {
 
   const handlePrint = () => {
-    // Create a printable receipt window
-    const printWindow = window.open('', '_blank', 'width=300,height=600');
-    printWindow.document.write(`
+    // Use an invisible iframe instead of window.open. 
+    // Chrome's --kiosk-printing often fails on popup windows, but works perfectly on iframes!
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
       <!DOCTYPE html>
       <html>
       <head>
@@ -62,13 +73,17 @@ export default function ReceiptModal({ sale, onClose }) {
       </body>
       </html>
     `);
-    printWindow.document.close();
-    printWindow.focus();
-    
-    // Slight delay ensures styles are applied before printing
+    doc.close();
+
+    // Slight delay to ensure styles are applied before printing
     setTimeout(() => {
-      printWindow.print();
-      printWindow.close(); // Auto-close window after print dialog is handled
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      
+      // Remove iframe after print
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 1000);
     }, 250);
   };
 

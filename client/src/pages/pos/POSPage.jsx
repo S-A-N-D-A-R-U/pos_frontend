@@ -126,41 +126,47 @@ export default function POSPage() {
     });
   }, [toast]);
 
-  const handleBarcodeScanned = useCallback((barcode) => {
-    let product = null;
-    let matchedVariant = null;
-
-    const findMatch = (bcode) => {
-      for (const p of allProducts || []) {
-        if (p.barcode === bcode || p.sku === bcode || (p.id && p.id.substring(0, 8).toUpperCase() === bcode)) {
-          product = p;
-          return;
-        }
-        if (p.variations) {
-          const v = p.variations.find(v => v.barcode === bcode || v.sku === bcode);
-          if (v) {
-            product = p;
-            matchedVariant = v;
-            return;
-          }
+  const findMatch = (bcode) => {
+    let match = null;
+    let variant = null;
+    
+    for (const p of products) {
+      if (p.barcode === bcode || p.sku === bcode || (p.id && p.id.substring(0, 8).toUpperCase() === bcode)) {
+        match = p;
+        break;
+      }
+      if (p.variations?.length) {
+        const v = p.variations.find(v => v.barcode === bcode || v.sku === bcode);
+        if (v) {
+          match = p;
+          variant = v;
+          break;
         }
       }
-    };
-
-    findMatch(barcode);
-
-    // Some scanners add a prefix letter (like 'a' for EAN-13) before the actual barcode.
-    if (!product && /^[a-zA-Z]/.test(barcode)) {
-      findMatch(barcode.substring(1));
     }
-
-    if (product) {
-      addToCart(product, matchedVariant);
-      toast.success(`Scanned: ${matchedVariant ? matchedVariant.name : product.name}`);
+    
+    if (match) {
+      addToCart(match, variant);
+      toast.success(`Scanned: ${variant ? variant.name : match.name}`);
     } else {
-      toast.warning(`No product found for barcode: ${barcode}`);
+      toast.warning(`No product found for barcode: ${bcode}`);
     }
-  }, [allProducts, addToCart, toast]);
+  };
+
+  const handleBarcodeScanned = useCallback((barcode) => {
+    // Some scanners add a prefix letter (like 'a' for EAN-13) before the actual barcode.
+    if (/^[a-zA-Z]/.test(barcode)) {
+      findMatch(barcode.substring(1));
+    } else {
+      findMatch(barcode);
+    }
+  }, [products, addToCart, toast]);
+
+  // Keep a stable reference to the latest callback to prevent listener rebuilding
+  const handleBarcodeScannedRef = useRef(handleBarcodeScanned);
+  useEffect(() => {
+    handleBarcodeScannedRef.current = handleBarcodeScanned;
+  }, [handleBarcodeScanned]);
 
   // Barcode scanner listener (detects rapid keystrokes)
   useEffect(() => {
@@ -171,11 +177,11 @@ export default function POSPage() {
       if (e.key === 'Enter' && barcodeBuffer.current.length >= 5) {
         const barcode = barcodeBuffer.current;
         barcodeBuffer.current = '';
-        handleBarcodeScanned(barcode);
+        handleBarcodeScannedRef.current(barcode);
         return;
       }
 
-      if (e.key.length === 1) {
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         barcodeBuffer.current += e.key;
         clearTimeout(barcodeTimeout.current);
         barcodeTimeout.current = setTimeout(() => {
@@ -186,7 +192,7 @@ export default function POSPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleBarcodeScanned]);
+  }, []); // Empty dependency array prevents stuttering
 
   const updateQty = useCallback((itemId, newQty) => {
     if (newQty <= 0) {

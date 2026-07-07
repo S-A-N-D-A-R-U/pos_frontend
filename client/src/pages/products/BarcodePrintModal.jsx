@@ -114,6 +114,7 @@ export default function BarcodePrintModal({ product, onClose }) {
               <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Label Size</label>
               <select className="input" value={labelSize} onChange={e => setLabelSize(e.target.value)}>
                 <option value="50x25">50mm x 25mm</option>
+                <option value="60x40">60mm x 40mm</option>
                 <option value="80x40">80mm x 40mm</option>
               </select>
             </div>
