@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+import User from './models/User.js';
 
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
@@ -37,6 +39,21 @@ async function start() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('✅ Connected to MongoDB');
+    
+    // Seed default admin if no users exist
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      console.log('No users found in DB. Creating default admin...');
+      const hashedPassword = await bcrypt.hash('admin123', 10);
+      await User.create({
+        _id: 'default-admin',
+        username: 'admin',
+        password: hashedPassword,
+        name: 'Administrator',
+        role: 'admin'
+      });
+      console.log('✅ Default admin created (admin / admin123)');
+    }
   } catch (err) {
     console.warn('⚠️  MongoDB not connected (running without database):', err.message);
     console.warn('   The frontend will work offline using IndexedDB');

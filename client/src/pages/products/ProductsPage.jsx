@@ -6,7 +6,7 @@ import { useSync } from '../../contexts/SyncContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency } from '../../utils/helpers';
 import {
-  Plus, Search, Edit3, Trash2, X, Save, Package, Filter, Image as ImageIcon, Upload, Printer
+  Plus, Search, Edit3, Trash2, X, Save, Package, Filter, Image as ImageIcon, Upload, Printer, ArrowLeft
 } from 'lucide-react';
 import BarcodePrintModal from './BarcodePrintModal';
 
@@ -20,7 +20,7 @@ export default function ProductsPage() {
   const [showBarcodePrint, setShowBarcodePrint] = useState(null);
   const [editProduct, setEditProduct] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', category: '', price: '', costPrice: '', stock: '', unit: 'piece', sku: '', barcode: '', image: '', supplierId: '',
+    name: '', category: '', price: '', costPrice: '', stock: '', unit: 'piece', sku: '', barcode: '', image: '', supplierId: '', variations: []
   });
 
   const products = useLiveQuery(() => db.products.toArray(), []);
@@ -48,10 +48,11 @@ export default function ProductsPage() {
         barcode: product.barcode || '',
         image: product.image || '',
         supplierId: product.supplierId || '',
+        variations: product.variations || [],
       });
     } else {
       setEditProduct(null);
-      setFormData({ name: '', category: categories?.[0]?.name || '', price: '', costPrice: '', stock: '', unit: 'piece', sku: '', barcode: '', image: '', supplierId: '' });
+      setFormData({ name: '', category: categories?.[0]?.name || '', price: '', costPrice: '', stock: '', unit: 'piece', sku: '', barcode: '', image: '', supplierId: '', variations: [] });
     }
     setShowForm(true);
   };
@@ -111,6 +112,7 @@ export default function ProductsPage() {
       image: formData.image,
       supplierId: formData.supplierId,
       supplierName: suppliers?.find(s => s.id === formData.supplierId)?.name || '',
+      variations: formData.variations || [],
       isActive: true,
       createdAt: editProduct?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -130,6 +132,189 @@ export default function ProductsPage() {
     await pushToOutbox('product', product.id, 'delete', { id: product.id });
     toast.success('Product deleted');
   };
+
+  const handleAddVariation = () => {
+    setFormData(prev => ({
+      ...prev,
+      variations: [...prev.variations, { id: uuidv4(), name: '', price: '', stock: '', sku: '', barcode: '' }]
+    }));
+  };
+
+  const handleUpdateVariation = (id, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      variations: prev.variations.map(v => v.id === id ? { ...v, [field]: value } : v)
+    }));
+  };
+
+  const handleRemoveVariation = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      variations: prev.variations.filter(v => v.id !== id)
+    }));
+  };
+
+  if (showForm) {
+    return (
+      <div style={{ padding: 28, maxWidth: 1400, margin: '0 auto' }} className="animate-fade-in">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button className="btn btn-ghost btn-icon" onClick={() => setShowForm(false)} style={{ width: 40, height: 40, borderRadius: '50%' }}>
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em' }}>{editProduct ? 'Edit Product' : 'Add New Product'}</h1>
+              <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                Fill in the details below to {editProduct ? 'update the' : 'create a new'} product.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSave}>
+              <Save size={18} /> {editProduct ? 'Update' : 'Save'} Product
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 450px', gap: 24, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div style={{ background: 'var(--color-bg-primary)', padding: 28, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Package size={18} color="var(--color-accent)" /> Basic Information
+              </h2>
+              <div style={{ display: 'grid', gap: 20 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Product Name <span style={{color: 'var(--color-danger)'}}>*</span></label>
+                  <input className="input" style={{ fontSize: 15, padding: '12px 16px' }} placeholder="e.g. Portland Cement 50kg" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Category</label>
+                    <select className="input" style={{ padding: '12px 16px' }} value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                      {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Supplier</label>
+                    <select className="input" style={{ padding: '12px 16px' }} value={formData.supplierId} onChange={e => setFormData({...formData, supplierId: e.target.value})}>
+                      <option value="">None</option>
+                      {suppliers?.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--color-bg-primary)', padding: 28, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Inventory & Pricing</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Selling Price (LKR) <span style={{color: 'var(--color-danger)'}}>*</span></label>
+                  <input className="input" type="number" style={{ padding: '12px 16px', fontSize: 16, fontWeight: 600, color: 'var(--color-success)' }} placeholder="0.00" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Cost Price (LKR)</label>
+                  <input className="input" type="number" style={{ padding: '12px 16px' }} placeholder="0.00" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Stock Quantity <span style={{color: 'var(--color-danger)'}}>*</span></label>
+                  <input className="input" type="number" style={{ padding: '12px 16px' }} placeholder="0" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Unit of Measure</label>
+                  <select className="input" style={{ padding: '12px 16px' }} value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
+                    {['piece', 'kg', 'bag', 'roll', 'rod', 'sheet', 'tin', 'bucket', 'pair', 'box', 'cube', 'm'].map(u => (
+                      <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--color-bg-primary)', padding: 28, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700 }}>Product Variations</h2>
+                <button className="btn btn-ghost" onClick={handleAddVariation} style={{ padding: '6px 12px', fontSize: 13 }}>
+                  <Plus size={16} /> Add Variation
+                </button>
+              </div>
+              {formData.variations.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-muted)', background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--color-border)' }}>
+                  No variations added. Use variations for different sizes, colors, etc.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {formData.variations.map((v, idx) => (
+                    <div key={v.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr auto', gap: 12, alignItems: 'end', background: 'var(--color-bg-secondary)', padding: 16, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Name (e.g. 50kg)</label>
+                        <input className="input" style={{ padding: '10px 14px', fontSize: 14 }} value={v.name} onChange={e => handleUpdateVariation(v.id, 'name', e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Price</label>
+                        <input className="input" type="number" style={{ padding: '10px 14px', fontSize: 14 }} placeholder={formData.price} value={v.price} onChange={e => handleUpdateVariation(v.id, 'price', e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Stock</label>
+                        <input className="input" type="number" style={{ padding: '10px 14px', fontSize: 14 }} value={v.stock} onChange={e => handleUpdateVariation(v.id, 'stock', e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>SKU</label>
+                        <input className="input" style={{ padding: '10px 14px', fontSize: 14 }} value={v.sku} onChange={e => handleUpdateVariation(v.id, 'sku', e.target.value)} />
+                      </div>
+                      <button className="btn btn-ghost btn-icon" onClick={() => handleRemoveVariation(v.id)} style={{ color: 'var(--color-danger)', marginBottom: 2 }}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div style={{ background: 'var(--color-bg-primary)', padding: 28, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Product Image</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                {formData.image ? (
+                  <div style={{ position: 'relative', width: '100%', aspectRatio: '1', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                    <img src={formData.image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button onClick={() => setFormData({...formData, image: ''})} style={{ position: 'absolute', top: 12, right: 12, background: 'var(--color-danger)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label style={{ width: '100%', aspectRatio: '1', borderRadius: 'var(--radius-md)', border: '2px dashed var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--color-text-muted)', background: 'var(--color-bg-secondary)', transition: 'all 0.2s' }}>
+                    <Upload size={32} style={{ marginBottom: 12, opacity: 0.5 }} />
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>Upload Image</span>
+                    <span style={{ fontSize: 12, marginTop: 4, opacity: 0.7 }}>Best size: 400x400px</span>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--color-bg-primary)', padding: 28, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Identifiers</h2>
+              <div style={{ display: 'grid', gap: 16 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>SKU (Stock Keeping Unit)</label>
+                  <input className="input" style={{ padding: '12px 16px' }} placeholder="e.g. CEM-001" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Barcode</label>
+                  <input className="input" style={{ padding: '12px 16px' }} placeholder="Scan or type" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 28, maxWidth: 1400, margin: '0 auto' }} className="animate-fade-in">
@@ -189,8 +374,8 @@ export default function ProductsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
-                  <Package size={32} style={{ marginBottom: 8, opacity: 0.3 }} />
+                <td colSpan={10} style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
+                  <Package size={32} style={{ marginBottom: 8, opacity: 0.3, margin: '0 auto' }} />
                   <div>No products found</div>
                 </td>
               </tr>
@@ -246,104 +431,6 @@ export default function ProductsPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Add/Edit Modal */}
-      {showForm && (
-        <div className="overlay" onClick={() => setShowForm(false)}>
-          <div className="modal animate-scale-in" onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, padding: 0 }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700 }}>{editProduct ? 'Edit Product' : 'Add Product'}</h2>
-              <button onClick={() => setShowForm(false)} className="btn btn-ghost btn-icon" style={{ minWidth: 36, minHeight: 36, padding: 0 }}>
-                <X size={18} />
-              </button>
-            </div>
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Image Upload */}
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 8 }}>
-                {formData.image ? (
-                  <div style={{ position: 'relative', width: 80, height: 80 }}>
-                    <img src={formData.image} alt="Preview" style={{ width: 80, height: 80, borderRadius: 'var(--radius-md)', objectFit: 'cover', border: '1px solid var(--color-border)' }} />
-                    <button onClick={() => setFormData({...formData, image: ''})} style={{ position: 'absolute', top: -8, right: -8, background: 'var(--color-danger)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <label style={{ width: 80, height: 80, borderRadius: 'var(--radius-md)', border: '2px dashed var(--color-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--color-text-muted)', background: 'var(--color-bg-secondary)', transition: 'all 0.2s' }}>
-                    <Upload size={20} style={{ marginBottom: 4 }} />
-                    <span style={{ fontSize: 10, fontWeight: 600 }}>Upload</span>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
-                  </label>
-                )}
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Product Image</h3>
-                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Upload an image for the POS screen. Best size: 400x400px.</p>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Product Name *</label>
-                <input className="input" placeholder="e.g. Portland Cement 50kg" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Category</label>
-                  <select className="input" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
-                    {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Supplier</label>
-                  <select className="input" value={formData.supplierId} onChange={e => setFormData({...formData, supplierId: e.target.value})}>
-                    <option value="">None</option>
-                    {suppliers?.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>SKU</label>
-                  <input className="input" placeholder="e.g. CEM-001" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Selling Price (LKR) *</label>
-                  <input className="input" type="number" placeholder="0.00" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Cost Price (LKR)</label>
-                  <input className="input" type="number" placeholder="0.00" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Stock Quantity *</label>
-                  <input className="input" type="number" placeholder="0" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Unit</label>
-                  <select className="input" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
-                    {['piece', 'kg', 'bag', 'roll', 'rod', 'sheet', 'tin', 'bucket', 'pair', 'box', 'cube', 'm'].map(u => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Barcode</label>
-                  <input className="input" placeholder="Scan or type" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                <button className="btn btn-secondary" onClick={() => setShowForm(false)} style={{ flex: 1 }}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleSave} style={{ flex: 1 }}>
-                  <Save size={16} /> {editProduct ? 'Update' : 'Add'} Product
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Barcode Print Modal */}
       {showBarcodePrint && (

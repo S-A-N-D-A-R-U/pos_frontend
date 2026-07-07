@@ -14,6 +14,14 @@ const productSchema = new mongoose.Schema({
   supplierId: { type: String },
   supplierName: { type: String },
   isActive: { type: Boolean, default: true },
+  variations: [{
+    id: { type: String },
+    name: { type: String },
+    price: { type: Number },
+    stock: { type: Number, default: 0 },
+    sku: { type: String },
+    barcode: { type: String }
+  }]
 }, { timestamps: true });
 
 export default mongoose.model('Product', productSchema);

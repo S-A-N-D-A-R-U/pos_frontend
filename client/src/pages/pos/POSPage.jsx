@@ -9,6 +9,7 @@ import { formatCurrency, generateReceiptNumber } from '../../utils/helpers';
 import PaymentModal from './PaymentModal';
 import ReceiptModal from './ReceiptModal';
 import NumPadModal from './NumPadModal';
+import VariationSelectModal from './VariationSelectModal';
 import {
   Search, X, Plus, Minus, Trash2, ShoppingCart, Pause, Play,
   RotateCcw, Grid3X3, List, Tag, Maximize, Minimize
@@ -27,6 +28,7 @@ export default function POSPage() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastSale, setLastSale] = useState(null);
   const [showNumPad, setShowNumPad] = useState(null);
+  const [showVariationSelect, setShowVariationSelect] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -87,16 +89,25 @@ export default function POSPage() {
   }) || [];
 
   // Cart operations
-  const addToCart = useCallback((product) => {
+  const addToCart = useCallback((product, variant = null) => {
+    if (product.variations && product.variations.length > 0 && !variant) {
+      setShowVariationSelect(product);
+      return;
+    }
+
     setCart(prev => {
-      const existing = prev.find(item => item.productId === product.id);
+      const existing = prev.find(item => item.productId === product.id && item.variantId === (variant ? variant.id : null));
+      const targetStock = variant ? variant.stock : product.stock;
+      const price = variant && variant.price ? Number(variant.price) : product.price;
+      const itemName = variant ? `${product.name} - ${variant.name}` : product.name;
+
       if (existing) {
-        if (existing.qty >= product.stock) {
+        if (existing.qty >= targetStock) {
           toast.warning('Not enough stock');
           return prev;
         }
         return prev.map(item =>
-          item.productId === product.id
+          item.id === existing.id
             ? { ...item, qty: item.qty + 1, subtotal: (item.qty + 1) * item.price }
             : item
         );
@@ -104,37 +115,48 @@ export default function POSPage() {
       return [...prev, {
         id: uuidv4(),
         productId: product.id,
-        productName: product.name,
-        price: product.price,
+        variantId: variant ? variant.id : null,
+        productName: itemName,
+        price: price,
         qty: 1,
-        subtotal: product.price,
+        subtotal: price,
         unit: product.unit,
-        stock: product.stock,
+        stock: targetStock,
       }];
     });
   }, [toast]);
 
   const handleBarcodeScanned = useCallback((barcode) => {
-    // Check for exact match first (barcode, sku, or fallback id)
-    let product = allProducts?.find(p => 
-      p.barcode === barcode || 
-      p.sku === barcode || 
-      (p.id && p.id.substring(0, 8).toUpperCase() === barcode)
-    );
+    let product = null;
+    let matchedVariant = null;
+
+    const findMatch = (bcode) => {
+      for (const p of allProducts || []) {
+        if (p.barcode === bcode || p.sku === bcode || (p.id && p.id.substring(0, 8).toUpperCase() === bcode)) {
+          product = p;
+          return;
+        }
+        if (p.variations) {
+          const v = p.variations.find(v => v.barcode === bcode || v.sku === bcode);
+          if (v) {
+            product = p;
+            matchedVariant = v;
+            return;
+          }
+        }
+      }
+    };
+
+    findMatch(barcode);
 
     // Some scanners add a prefix letter (like 'a' for EAN-13) before the actual barcode.
     if (!product && /^[a-zA-Z]/.test(barcode)) {
-      const strippedBarcode = barcode.substring(1);
-      product = allProducts?.find(p => 
-        p.barcode === strippedBarcode || 
-        p.sku === strippedBarcode || 
-        (p.id && p.id.substring(0, 8).toUpperCase() === strippedBarcode)
-      );
+      findMatch(barcode.substring(1));
     }
 
     if (product) {
-      addToCart(product);
-      toast.success(`Scanned: ${product.name}`);
+      addToCart(product, matchedVariant);
+      toast.success(`Scanned: ${matchedVariant ? matchedVariant.name : product.name}`);
     } else {
       toast.warning(`No product found for barcode: ${barcode}`);
     }
@@ -252,6 +274,7 @@ export default function POSPage() {
       id: uuidv4(),
       saleId,
       productId: item.productId,
+      variantId: item.variantId,
       productName: item.productName,
       price: item.price,
       qty: item.qty,
@@ -262,7 +285,14 @@ export default function POSPage() {
     // Update product stock
     for (const item of cart) {
       await db.products.where('id').equals(item.productId).modify(p => {
-        p.stock = Math.max(0, (p.stock || 0) - item.qty);
+        if (item.variantId && p.variations) {
+          const v = p.variations.find(v => v.id === item.variantId);
+          if (v) {
+            v.stock = Math.max(0, (v.stock || 0) - item.qty);
+          }
+        } else {
+          p.stock = Math.max(0, (p.stock || 0) - item.qty);
+        }
         p.updatedAt = new Date().toISOString();
       });
     }
@@ -757,6 +787,16 @@ export default function POSPage() {
       </div>
 
       {/* Modals */}
+      {showVariationSelect && (
+        <VariationSelectModal
+          product={showVariationSelect}
+          onClose={() => setShowVariationSelect(null)}
+          onSelect={(variant) => {
+            addToCart(showVariationSelect, variant);
+            setShowVariationSelect(null);
+          }}
+        />
+      )}
       {showPayment && (
         <PaymentModal
           total={total}

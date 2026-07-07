@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import db from '../db/database';
+import { useAuth } from './AuthContext';
 
 const SyncContext = createContext(null);
 
 export function SyncProvider({ children }) {
+  const { logout } = useAuth();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(null);
@@ -70,9 +72,21 @@ export function SyncProvider({ children }) {
           },
           body: JSON.stringify({ changes: pending }),
         });
+        if (res.status === 401) {
+          logout();
+          return;
+        }
         if (res.ok) {
-          const ids = pending.map(p => p.id);
-          await db.syncOutbox.where('id').anyOf(ids).modify({ status: 'synced' });
+          const responseBody = await res.json();
+          if (responseBody.results) {
+            const successIds = responseBody.results.filter(r => r.status === 'ok').map(r => r.id);
+            if (successIds.length > 0) {
+              await db.syncOutbox.where('id').anyOf(successIds).modify({ status: 'synced' });
+            }
+          } else {
+            const ids = pending.map(p => p.id);
+            await db.syncOutbox.where('id').anyOf(ids).modify({ status: 'synced' });
+          }
         }
       }
 
@@ -82,15 +96,57 @@ export function SyncProvider({ children }) {
       const res = await fetch(`/api/sync/pull?since=${encodeURIComponent(lastSync)}`, {
         headers: { 'Authorization': `Bearer ${user.token}` },
       });
+      if (res.status === 401) {
+        logout();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
-        if (data.products?.length) await db.products.bulkPut(data.products);
-        if (data.categories?.length) await db.categories.bulkPut(data.categories);
-        if (data.customers?.length) await db.customers.bulkPut(data.customers);
-        if (data.suppliers?.length) await db.suppliers.bulkPut(data.suppliers);
-        const now = new Date().toISOString();
-        await db.settings.put({ key: 'lastSyncAt', value: now });
-        setLastSyncAt(now);
+        
+        // Helper to process active/deleted entities
+        const processEntities = async (table, items) => {
+          if (!items || !items.length) return;
+          const active = items.filter(i => i.isActive !== false);
+          const deleted = items.filter(i => i.isActive === false).map(i => i.id);
+          if (active.length > 0) await table.bulkPut(active);
+          if (deleted.length > 0) await table.bulkDelete(deleted);
+        };
+
+        await processEntities(db.products, data.products);
+        await processEntities(db.categories, data.categories);
+        await processEntities(db.customers, data.customers);
+        await processEntities(db.suppliers, data.suppliers);
+
+        if (data.sales?.length) {
+          await db.sales.bulkPut(data.sales);
+          
+          // Flatten sale items
+          const saleItems = [];
+          for (const sale of data.sales) {
+            if (sale.items) {
+              for (const item of sale.items) {
+                saleItems.push({
+                  id: crypto.randomUUID(), 
+                  saleId: sale.id,
+                  productId: item.productId,
+                  productName: item.productName,
+                  price: item.price,
+                  qty: item.qty,
+                  subtotal: item.subtotal
+                });
+              }
+            }
+          }
+          if (saleItems.length > 0) await db.saleItems.bulkPut(saleItems);
+        }
+        
+        if (data.customerPayments?.length) {
+          await db.customerPayments.bulkPut(data.customerPayments);
+        }
+
+        const syncTime = data.syncedAt || new Date().toISOString();
+        await db.settings.put({ key: 'lastSyncAt', value: syncTime });
+        setLastSyncAt(syncTime);
       }
 
       const newPending = await db.syncOutbox.where('status').equals('pending').count();
@@ -102,12 +158,21 @@ export function SyncProvider({ children }) {
     }
   }, [isOnline, isSyncing, lastSyncAt]);
 
-  // Auto-sync when coming back online
+  // Auto-sync on load or when coming back online
   useEffect(() => {
-    if (isOnline && pendingCount > 0) {
+    if (isOnline) {
       syncNow();
     }
   }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Background polling every 30s
+  useEffect(() => {
+    if (!isOnline) return;
+    const interval = setInterval(() => {
+      syncNow();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isOnline, syncNow]);
 
   return (
     <SyncContext.Provider value={{ isOnline, isSyncing, lastSyncAt, pendingCount, pushToOutbox, syncNow }}>
