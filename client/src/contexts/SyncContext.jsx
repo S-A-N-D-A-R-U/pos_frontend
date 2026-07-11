@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import db from '../db/database';
 import { useAuth } from './AuthContext';
+import { apiFetch } from '../utils/api';
 
 const SyncContext = createContext(null);
 
@@ -64,7 +65,7 @@ export function SyncProvider({ children }) {
       const pending = await db.syncOutbox.where('status').equals('pending').toArray();
       if (pending.length > 0) {
         const user = JSON.parse(localStorage.getItem('buildpos_user') || '{}');
-        const res = await fetch('/api/sync/push', {
+        const res = await apiFetch('/api/sync/push', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
