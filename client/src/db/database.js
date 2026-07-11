@@ -32,4 +32,8 @@ db.version(5).stores({
   products: 'id, name, category, barcode, sku, price, updatedAt, syncStatus, isActive, supplierId'
 });
 
+db.version(6).stores({
+  zReports: 'id, cashierId, closedAt, syncStatus'
+});
+
 export default db;

@@ -9,10 +9,12 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend,
 } from 'recharts';
+import ZReportsArchive from './ZReportsArchive';
 
 const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
 
 export default function ReportsPage() {
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [dateRange, setDateRange] = useState(() => {
     const end = new Date();
     const start = new Date();
@@ -145,17 +147,36 @@ export default function ReportsPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em' }}>Reports</h1>
-          <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Sales analytics & performance insights
-          </p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em' }}>Reports & Analytics</h1>
+          <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
+            <button
+              className={`btn ${activeTab === 'dashboard' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setActiveTab('dashboard')}
+              style={{ padding: '6px 12px', minHeight: 32 }}
+            >
+              Sales Dashboard
+            </button>
+            <button
+              className={`btn ${activeTab === 'zreports' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setActiveTab('zreports')}
+              style={{ padding: '6px 12px', minHeight: 32 }}
+            >
+              Z-Reports Archive
+            </button>
+          </div>
         </div>
-        <button className="btn btn-secondary" onClick={exportCSV}>
-          <Download size={16} /> Export CSV
-        </button>
+        {activeTab === 'dashboard' && (
+          <button className="btn btn-secondary" onClick={exportCSV}>
+            <Download size={16} /> Export CSV
+          </button>
+        )}
       </div>
 
-      {/* Date Filter */}
+      {activeTab === 'zreports' ? (
+        <ZReportsArchive />
+      ) : (
+        <>
+          {/* Date Filter */}
       <div className="card" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
         <Calendar size={18} style={{ color: 'var(--color-accent)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -307,7 +328,9 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

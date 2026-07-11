@@ -10,9 +10,11 @@ import PaymentModal from './PaymentModal';
 import ReceiptModal from './ReceiptModal';
 import NumPadModal from './NumPadModal';
 import VariationSelectModal from './VariationSelectModal';
+import DiscountModal from './DiscountModal';
+import ZReportModal from './ZReportModal';
 import {
   Search, X, Plus, Minus, Trash2, ShoppingCart, Pause, Play,
-  RotateCcw, Grid3X3, List, Tag, Maximize, Minimize
+  RotateCcw, Grid3X3, List, Tag, Maximize, Minimize, Percent, FileText
 } from 'lucide-react';
 
 export default function POSPage() {
@@ -23,11 +25,16 @@ export default function POSPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [cart, setCart] = useState([]);
+  const [cartDiscountType, setCartDiscountType] = useState('percentage');
+  const [cartDiscountValue, setCartDiscountValue] = useState(0);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerInput, setCustomerInput] = useState('');
   const [showPayment, setShowPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastSale, setLastSale] = useState(null);
   const [showNumPad, setShowNumPad] = useState(null);
+  const [showDiscountModal, setShowDiscountModal] = useState(null);
+  const [showZReport, setShowZReport] = useState(false);
   const [showVariationSelect, setShowVariationSelect] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -119,14 +126,17 @@ export default function POSPage() {
           return prev;
         }
         
-        // If promptQuantity is true, we just return the existing state and let the numpad handle it
         if (product.promptQuantity) {
           return prev;
         }
 
+        const newQty = existing.qty + 1;
+        const itemTotal = newQty * price;
+        const discAmt = existing.discountType === 'percentage' ? itemTotal * ((existing.discountValue || 0) / 100) : (existing.discountValue || 0);
+
         return prev.map(item =>
           item.id === existing.id
-            ? { ...item, qty: item.qty + 1, subtotal: (item.qty + 1) * item.price }
+            ? { ...item, qty: newQty, subtotal: Math.max(0, itemTotal - discAmt) }
             : item
         );
       }
@@ -139,6 +149,8 @@ export default function POSPage() {
         productName: itemName,
         price: price,
         qty: product.promptQuantity ? 0 : 1,
+        discountType: 'percentage',
+        discountValue: 0,
         subtotal: product.promptQuantity ? 0 : price,
         unit: product.unit,
         stock: targetStock,
@@ -148,7 +160,6 @@ export default function POSPage() {
       return [...prev, newItem];
     });
 
-    // Queue the numpad pop-up after the cart has rendered the new item
     if (product.promptQuantity) {
       setTimeout(() => {
         setShowNumPad({
@@ -190,7 +201,6 @@ export default function POSPage() {
   };
 
   const handleBarcodeScanned = useCallback((barcode) => {
-    // Some scanners add a prefix letter (like 'a' for EAN-13) before the actual barcode.
     if (/^[a-zA-Z]/.test(barcode)) {
       findMatch(barcode.substring(1));
     } else {
@@ -198,7 +208,6 @@ export default function POSPage() {
     }
   }, [products, addToCart, toast]);
 
-  // Keep stable references for shortcuts to avoid recreating listener
   const stateRefs = useRef({ cart, showPayment, showVariationSelect, showNumPad });
   useEffect(() => {
     stateRefs.current = { cart, showPayment, showVariationSelect, showNumPad };
@@ -209,12 +218,10 @@ export default function POSPage() {
     handleBarcodeScannedRef.current = handleBarcodeScanned;
   }, [handleBarcodeScanned]);
 
-  // Global Shortcuts & Barcode scanner listener
   useEffect(() => {
     const handleKeyDown = (e) => {
       const state = stateRefs.current;
       
-      // Global Escape
       if (e.key === 'Escape') {
         if (state.showVariationSelect) {
           setShowVariationSelect(null);
@@ -230,19 +237,16 @@ export default function POSPage() {
         }
         if (state.cart.length > 0) {
           setCart([]);
-          // Assuming toast is available in scope. Since we don't have it in refs, we can rely on standard setCart
           return;
         }
       }
 
-      // Global Search
       if (e.key === 'F2') {
         e.preventDefault();
         document.getElementById('pos-search')?.focus();
         return;
       }
 
-      // Ignore standard typing if we are in an input, UNLESS it's Enter in the search bar
       if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Enter') return;
 
       if (e.key === 'Enter') {
@@ -252,13 +256,12 @@ export default function POSPage() {
           handleBarcodeScannedRef.current(barcode);
           return;
         } else if (!state.showPayment && !state.showVariationSelect && !state.showNumPad && state.cart.length > 0) {
-          e.preventDefault(); // Prevent accidental form submissions if in input
+          e.preventDefault(); 
           setShowPayment(true);
           return;
         }
       }
 
-      // Only build barcode buffer if not typing in an input
       if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           barcodeBuffer.current += e.key;
@@ -274,28 +277,44 @@ export default function POSPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const updateQty = useCallback((itemId, newQty) => {
-    if (newQty <= 0) {
-      setCart(prev => prev.filter(item => item.id !== itemId));
-      return;
-    }
+  const updateQty = (id, newQty) => {
     setCart(prev => prev.map(item => {
-      if (item.id === itemId) {
-        let roundedQty = Math.round(newQty * 10000) / 10000;
+      if (item.id === id) {
+        if (newQty <= 0) return null;
         
-        // Stock limit guard
-        // Note: item.stock inside cart is the *initial* targetStock when it was added, 
-        // which represents the total DB stock.
-        if (roundedQty > item.stock) {
-          toast.warning(`Cannot exceed available stock (${item.stock} ${item.unit})`);
-          roundedQty = item.stock;
+        const p = allProducts.find(p => p.id === item.productId);
+        if (p) {
+          let stock = p.stock || 0;
+          if (item.variantId && p.variations) {
+            const v = p.variations.find(v => v.id === item.variantId);
+            if (v) stock = v.stock || 0;
+          }
+          if (newQty > stock) {
+            toast.error(`Cannot exceed available stock (${stock})`);
+            return item; 
+          }
         }
+        const roundQty = Math.round(newQty * 10000) / 10000;
+        const itemTotal = item.price * roundQty;
+        const discAmt = item.discountType === 'percentage' ? itemTotal * ((item.discountValue || 0) / 100) : (item.discountValue || 0);
 
-        return { ...item, qty: roundedQty, subtotal: roundedQty * item.price };
+        return { ...item, qty: roundQty, subtotal: Math.max(0, itemTotal - discAmt) };
+      }
+      return item;
+    }).filter(Boolean));
+  };
+
+  const applyItemDiscount = (id, type, val) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        const itemTotal = item.price * item.qty;
+        const discAmt = type === 'percentage' ? itemTotal * ((val || 0) / 100) : (val || 0);
+        return { ...item, discountType: type, discountValue: val, subtotal: Math.max(0, itemTotal - discAmt) };
       }
       return item;
     }));
-  }, [toast]);
+    setShowDiscountModal(null);
+  };
 
   const removeFromCart = useCallback((itemId) => {
     setCart(prev => prev.filter(item => item.id !== itemId));
@@ -305,7 +324,6 @@ export default function POSPage() {
     setCart([]);
   }, []);
 
-  // Hold order
   const holdOrder = useCallback(async () => {
     if (cart.length === 0) return;
     const order = {
@@ -320,12 +338,10 @@ export default function POSPage() {
     toast.info('Order held');
   }, [cart, user, heldOrders, toast]);
 
-  // Resume held order
   const resumeOrder = useCallback(async (orderId) => {
     const order = await db.heldOrders.get(orderId);
     if (order) {
       if (cart.length > 0) {
-        // Hold current cart first
         await holdOrder();
       }
       setCart(order.items);
@@ -334,7 +350,6 @@ export default function POSPage() {
     }
   }, [cart, holdOrder, toast]);
 
-  // Complete sale
   const completeSale = useCallback(async (paymentMethod, amountPaid, printReceipt) => {
     const saleId = uuidv4();
     const receiptNumber = generateReceiptNumber();
@@ -351,6 +366,9 @@ export default function POSPage() {
       subtotal: total,
       taxRate: 0,
       taxAmount: 0,
+      discountType: cartDiscountType,
+      discountValue: cartDiscountValue,
+      discountAmount: globalDiscountAmount,
       total,
       paymentMethod,
       amountPaid,
@@ -363,10 +381,8 @@ export default function POSPage() {
       syncStatus: 'pending',
     };
 
-    // Save sale
     await db.sales.put(sale);
 
-    // Save sale items
     const saleItems = cart.map(item => ({
       id: uuidv4(),
       saleId,
@@ -375,11 +391,12 @@ export default function POSPage() {
       productName: item.productName,
       price: item.price,
       qty: item.qty,
+      discountType: item.discountType,
+      discountValue: item.discountValue,
       subtotal: item.subtotal,
     }));
     await db.saleItems.bulkPut(saleItems);
 
-    // Update product stock and sync
     for (const item of cart) {
       const p = await db.products.get(item.productId);
       if (p) {
@@ -398,28 +415,31 @@ export default function POSPage() {
       }
     }
 
-    // Queue for sync
     await pushToOutbox('sale', saleId, 'create', sale);
 
     setLastSale(sale);
     setCart([]);
+    setCartDiscountType('percentage');
+    setCartDiscountValue(0);
     setSelectedCustomerId('');
+    setCustomerInput('');
     setShowPayment(false);
     if (printReceipt) {
       setShowReceipt(true);
     }
     toast.success('Sale completed!');
-  }, [cart, user, pushToOutbox, toast, selectedCustomer]);
+  }, [cart, user, pushToOutbox, toast, selectedCustomer, cartDiscountType, cartDiscountValue]);
 
-  // Calculations
   const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
+  const globalDiscountAmount = cartDiscountType === 'percentage' 
+    ? subtotal * (cartDiscountValue / 100) 
+    : cartDiscountValue;
   const taxAmount = 0;
-  const total = subtotal + taxAmount;
+  const total = Math.max(0, subtotal - globalDiscountAmount) + taxAmount;
   const itemCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--color-bg-primary)' }}>
-      {/* Top Header */}
       <div style={{
         height: 48,
         background: 'var(--color-bg-secondary)',
@@ -437,19 +457,25 @@ export default function POSPage() {
              {currentTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
            </span>
          </div>
-         <button 
-           className="btn btn-ghost btn-icon" 
-           onClick={toggleFullScreen}
-           title="Toggle Full Screen"
-           style={{ color: 'var(--color-text-secondary)' }}
-         >
-           {isFullScreen ? <Minimize size={18} /> : <Maximize size={18} />}
-         </button>
+         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+           <button 
+             className="btn btn-secondary" 
+             onClick={() => setShowZReport(true)}
+             style={{ height: 32, padding: '0 12px', fontSize: 13, gap: 6 }}
+           >
+             <FileText size={14} /> End Shift
+           </button>
+           <button 
+             className="btn btn-ghost btn-icon" 
+             onClick={toggleFullScreen}
+             title="Toggle Fullscreen"
+           >
+             {isFullScreen ? <Minimize size={18} /> : <Maximize size={18} />}
+           </button>
+         </div>
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        
-        {/* LEFT: Vertical Categories Sidebar */}
         <div style={{
           width: 110,
           background: 'var(--color-bg-secondary)',
@@ -505,9 +531,7 @@ export default function POSPage() {
           ))}
         </div>
 
-        {/* CENTER: Product Grid */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        {/* Search Bar */}
         <div style={{
           padding: '16px 20px',
           background: 'var(--color-bg-secondary)',
@@ -560,8 +584,6 @@ export default function POSPage() {
           </button>
         </div>
 
-
-        {/* Product Grid */}
         <div style={{
           flex: 1,
           overflow: 'auto',
@@ -679,7 +701,6 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Held Orders Bar */}
         {heldOrders?.length > 0 && (
           <div style={{
             padding: '10px 20px',
@@ -706,7 +727,6 @@ export default function POSPage() {
         )}
       </div>
 
-      {/* RIGHT: Cart / Order Panel */}
       <div style={{
         width: 450,
         background: 'var(--color-bg-secondary)',
@@ -715,20 +735,33 @@ export default function POSPage() {
         flexDirection: 'column',
         flexShrink: 0,
       }}>
-        {/* Customer Selector */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
-          <select 
-             className="input" 
-             value={selectedCustomerId} 
-             onChange={e => setSelectedCustomerId(e.target.value)}
-             style={{ width: '100%', fontWeight: 600 }}
-          >
-             <option value="">Walk-in Customer</option>
-             {customers?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
+          <input
+            list="customers-list"
+            className="input"
+            placeholder="Walk-in Customer (Search...)"
+            value={customerInput}
+            onChange={e => {
+              const val = e.target.value;
+              setCustomerInput(val);
+              const found = customers?.find(c => c.name === val || `${c.name} (${c.phone})` === val);
+              if (found) {
+                setSelectedCustomerId(found.id);
+                setCustomerInput(found.name);
+              } else {
+                setSelectedCustomerId('');
+              }
+            }}
+            onFocus={() => {
+              if (customerInput === '') setCustomerInput('');
+            }}
+            style={{ width: '100%', fontWeight: 600 }}
+          />
+          <datalist id="customers-list">
+            {customers?.map(c => <option key={c.id} value={`${c.name} (${c.phone})`} />)}
+          </datalist>
         </div>
 
-        {/* Cart Header */}
         <div style={{
           padding: '16px 20px',
           borderBottom: '1px solid var(--color-border)',
@@ -754,7 +787,6 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Cart Items */}
         <div style={{ flex: 1, overflow: 'auto', padding: '8px 0' }}>
           {cart.length === 0 ? (
             <div style={{
@@ -792,10 +824,23 @@ export default function POSPage() {
                   <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                     {formatCurrency(item.price)} × {item.qty}
                   </div>
+                  {item.discountValue > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--color-danger)', fontWeight: 600, marginTop: 2 }}>
+                      Disc: {item.discountType === 'percentage' ? `${item.discountValue}% off` : `${formatCurrency(item.discountValue)} off`}
+                    </div>
+                  )}
                 </div>
 
-                {/* Qty Controls */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    onClick={() => setShowDiscountModal(item)}
+                    className="btn btn-ghost btn-icon"
+                    title="Apply Discount"
+                    style={{ width: 32, height: 32, minWidth: 32, minHeight: 32, padding: 0, borderRadius: 'var(--radius-sm)' }}
+                  >
+                    <Percent size={14} />
+                  </button>
+                  <div style={{ width: 1, height: 16, background: 'var(--color-border)', margin: '0 4px' }}></div>
                   <button
                     onClick={() => updateQty(item.id, item.qty - 1)}
                     className="btn btn-ghost btn-icon"
@@ -831,12 +876,10 @@ export default function POSPage() {
                   </button>
                 </div>
 
-                {/* Subtotal */}
                 <div style={{ fontWeight: 700, fontSize: 13, minWidth: 80, textAlign: 'right', color: 'var(--color-text-primary)' }}>
                   {formatCurrency(item.subtotal)}
                 </div>
 
-                {/* Remove */}
                 <button
                   onClick={() => removeFromCart(item.id)}
                   style={{
@@ -854,32 +897,54 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Cart Summary & Actions */}
         <div style={{
           borderTop: '1px solid var(--color-border)',
-          padding: '16px 20px',
+          padding: '10px 20px',
           background: 'var(--color-bg-secondary)',
         }}>
-          {/* Totals */}
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8 }}>
             <div style={{
               display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--color-text-secondary)',
-              marginBottom: 6,
+              marginBottom: 4,
             }}>
               <span>Subtotal ({itemCount} items)</span>
               <span>{formatCurrency(subtotal)}</span>
             </div>
+            
             <div style={{
               display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--color-text-secondary)',
-              marginBottom: 12,
+              marginBottom: 4, alignItems: 'center'
             }}>
-              <span>Tax (0%)</span>
-              <span>{formatCurrency(taxAmount)}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>Overall Discount</span>
+                <button 
+                  className="btn btn-ghost btn-icon" 
+                  style={{ width: 24, height: 24, padding: 0 }}
+                  onClick={() => setShowDiscountModal({
+                    id: 'global',
+                    productName: 'Entire Order',
+                    qty: 1,
+                    price: subtotal,
+                    discountType: cartDiscountType,
+                    discountValue: cartDiscountValue
+                  })}
+                >
+                  <Percent size={12} />
+                </button>
+              </div>
+              {cartDiscountValue > 0 ? (
+                <span style={{ color: 'var(--color-danger)' }}>
+                  -{formatCurrency(globalDiscountAmount)}
+                  {cartDiscountType === 'percentage' && ` (${cartDiscountValue}%)`}
+                </span>
+              ) : (
+                <span>Rs. 0.00</span>
+              )}
             </div>
             <div style={{
               display: 'flex', justifyContent: 'space-between',
               fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)',
-              paddingTop: 12,
+              paddingTop: 8,
               borderTop: '2px solid var(--color-border)',
             }}>
               <span>Total</span>
@@ -887,7 +952,6 @@ export default function POSPage() {
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               className="btn btn-secondary"
@@ -912,7 +976,6 @@ export default function POSPage() {
 
       </div>
 
-      {/* Modals */}
       {showPayment && (
         <PaymentModal
           total={total}
@@ -941,9 +1004,32 @@ export default function POSPage() {
       {showNumPad && (
         <NumPadModal
           item={showNumPad}
-          onConfirm={(qty) => { updateQty(showNumPad.id, qty); setShowNumPad(null); }}
           onClose={() => setShowNumPad(null)}
+          onApply={(id, newQty) => {
+            updateQty(id, newQty);
+            setShowNumPad(null);
+          }}
         />
+      )}
+
+      {showDiscountModal && (
+        <DiscountModal
+          item={showDiscountModal}
+          onClose={() => setShowDiscountModal(null)}
+          onApply={(id, type, val) => {
+            if (id === 'global') {
+              setCartDiscountType(type);
+              setCartDiscountValue(val);
+              setShowDiscountModal(null);
+            } else {
+              applyItemDiscount(id, type, val);
+            }
+          }}
+        />
+      )}
+
+      {showZReport && (
+        <ZReportModal onClose={() => setShowZReport(false)} />
       )}
     </div>
   );
