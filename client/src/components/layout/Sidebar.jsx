@@ -21,10 +21,14 @@ import {
 } from 'lucide-react';
 import { timeAgo } from '../../utils/helpers';
 
-export default function Sidebar({ collapsed, onToggle }) {
+import { useState } from 'react';
+
+export default function Sidebar() {
   const { user, logout, isAdmin } = useAuth();
   const { isOnline, isSyncing, lastSyncAt, pendingCount, syncNow } = useSync();
   const navigate = useNavigate();
+  const [isHovered, setIsHovered] = useState(false);
+  const collapsed = !isHovered;
 
   const handleLogout = () => {
     logout();
@@ -51,7 +55,12 @@ export default function Sidebar({ collapsed, onToggle }) {
   const links = isAdmin ? adminLinks : cashierLinks;
 
   return (
-    <div className="sidebar" style={{ width: collapsed ? 72 : 250 }}>
+    <div 
+      className="sidebar" 
+      style={{ width: collapsed ? 72 : 250, height: '100%' }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       {/* Logo */}
       <div style={{
         padding: collapsed ? '20px 0' : '20px 18px',
@@ -197,30 +206,6 @@ export default function Sidebar({ collapsed, onToggle }) {
         )}
       </div>
 
-      {/* Collapse Toggle */}
-      <button
-        onClick={onToggle}
-        style={{
-          position: 'absolute',
-          top: 80,
-          right: -14,
-          width: 28,
-          height: 28,
-          borderRadius: '50%',
-          background: 'var(--color-bg-secondary)',
-          border: '1px solid var(--color-border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          color: 'var(--color-text-secondary)',
-          zIndex: 50,
-          transition: 'all 0.15s',
-        }}
-      >
-        {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-      </button>
     </div>
   );
 }
