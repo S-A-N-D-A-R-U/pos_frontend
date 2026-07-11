@@ -75,10 +75,10 @@ export default function SettingsPage() {
       try {
         const backup = JSON.parse(event.target.result);
         if (!confirm('This will replace all your current data with the backup. Are you sure?')) return;
-        
+
         const tables = Object.keys(backup);
         const validTables = tables.filter(t => db[t]);
-        
+
         await db.transaction('rw', validTables.map(t => db[t]), async () => {
           for (const table of validTables) {
             await db[table].clear();
@@ -187,12 +187,12 @@ export default function SettingsPage() {
           <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} style={{ flex: 1 }}>
             <Upload size={16} /> Restore Data
           </button>
-          <input 
-            type="file" 
-            accept=".json" 
-            ref={fileInputRef} 
-            style={{ display: 'none' }} 
-            onChange={handleRestoreData} 
+          <input
+            type="file"
+            accept=".json"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleRestoreData}
           />
         </div>
       </div>

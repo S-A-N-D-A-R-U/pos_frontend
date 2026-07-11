@@ -11,7 +11,7 @@ export default function ZReportModal({ onClose }) {
   const { user } = useAuth();
   const { pushToOutbox } = useSync();
   const toast = useToast();
-  
+
   const [sales, setSales] = useState([]);
   const [lastZReport, setLastZReport] = useState(null);
   const [actualCashInput, setActualCashInput] = useState('');
@@ -26,7 +26,7 @@ export default function ZReportModal({ onClose }) {
           .equals(user?.id || 'unknown')
           .reverse()
           .sortBy('closedAt');
-        
+
         const lastReport = reports.length > 0 ? reports[0] : null;
         setLastZReport(lastReport);
 
@@ -59,24 +59,24 @@ export default function ZReportModal({ onClose }) {
     let cashSales = 0;
     let cardSales = 0;
     let totalDiscount = 0;
-    
+
     sales.forEach(s => {
       totalSales += s.total;
       if (s.paymentMethod === 'cash') cashSales += s.total;
       if (s.paymentMethod === 'card') cardSales += s.total;
-      
+
       // Global discount
       if (s.discountAmount) totalDiscount += s.discountAmount;
-      
+
       // Item discounts
       if (s.items) {
         s.items.forEach(item => {
           if (item.discountValue > 0) {
-             const itemTotal = item.price * item.qty;
-             const disc = item.discountType === 'percentage' 
-               ? itemTotal * (item.discountValue / 100) 
-               : item.discountValue;
-             totalDiscount += disc;
+            const itemTotal = item.price * item.qty;
+            const disc = item.discountType === 'percentage'
+              ? itemTotal * (item.discountValue / 100)
+              : item.discountValue;
+            totalDiscount += disc;
           }
         });
       }
@@ -134,10 +134,21 @@ export default function ZReportModal({ onClose }) {
         <style>
           @page { margin: 0; size: 80mm auto; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Courier New', monospace; font-size: 12px; width: 100%; max-width: 280px; padding: 10px; margin: 0 auto; }
+          body { 
+            font-family: 'Courier New', Courier, monospace; 
+            font-size: 13px;
+            width: 100%; 
+            max-width: 280px; 
+            padding: 10px; 
+            margin: 0 auto; 
+            color: #000;
+            background: #fff;
+            line-height: 1.2;
+            -webkit-text-stroke: 0.25px #000;
+          }
           .center { text-align: center; }
           .bold { font-weight: bold; }
-          .line { border-top: 1px dashed #000; margin: 8px 0; }
+          .line { border-top: 1px dashed #000; margin: 6px 0; }
           .row { display: flex; justify-content: space-between; margin: 3px 0; }
           .big { font-size: 16px; }
           h1 { font-size: 18px; margin-bottom: 4px; }
@@ -198,8 +209,8 @@ export default function ZReportModal({ onClose }) {
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20
     }}>
-      <div 
-        className="card animate-scale-up" 
+      <div
+        className="card animate-scale-up"
         style={{ width: '100%', maxWidth: 500, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
       >
         <div style={{
@@ -221,16 +232,16 @@ export default function ZReportModal({ onClose }) {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-             <div className="card" style={{ padding: 16, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)' }}>
-               <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 8 }}>Total Sales</div>
-               <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-accent)' }}>{formatCurrency(stats.totalSales)}</div>
-               <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>{stats.count} Orders</div>
-             </div>
-             <div className="card" style={{ padding: 16, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)' }}>
-               <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 8 }}>Cash Sales</div>
-               <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-success)' }}>{formatCurrency(stats.cashSales)}</div>
-               <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>Card: {formatCurrency(stats.cardSales)}</div>
-             </div>
+            <div className="card" style={{ padding: 16, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 8 }}>Total Sales</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-accent)' }}>{formatCurrency(stats.totalSales)}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>{stats.count} Orders</div>
+            </div>
+            <div className="card" style={{ padding: 16, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 8 }}>Cash Sales</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-success)' }}>{formatCurrency(stats.cashSales)}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>Card: {formatCurrency(stats.cardSales)}</div>
+            </div>
           </div>
 
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 20 }}>
@@ -249,16 +260,16 @@ export default function ZReportModal({ onClose }) {
                 onChange={e => setActualCashInput(e.target.value)}
                 placeholder="0.00"
               />
-              
+
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid var(--color-border)' }}>
                 <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Expected Cash:</span>
                 <span style={{ fontWeight: 600 }}>{formatCurrency(expectedCash)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
                 <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Variance:</span>
-                <span style={{ 
-                  fontWeight: 700, 
-                  color: variance === 0 ? 'var(--color-success)' : 'var(--color-danger)' 
+                <span style={{
+                  fontWeight: 700,
+                  color: variance === 0 ? 'var(--color-success)' : 'var(--color-danger)'
                 }}>
                   {variance === 0 ? 'Balanced' : (variance > 0 ? `+${formatCurrency(variance)} (Over)` : `${formatCurrency(variance)} (Short)`)}
                 </span>
@@ -271,15 +282,15 @@ export default function ZReportModal({ onClose }) {
           padding: '16px 20px', borderTop: '1px solid var(--color-border)',
           display: 'flex', gap: 12, background: 'var(--color-bg-secondary)'
         }}>
-          <button 
-            className="btn btn-secondary" 
+          <button
+            className="btn btn-secondary"
             style={{ flex: 1 }}
             onClick={() => handlePrint('X')}
           >
             <Printer size={16} /> Print X-Report (Preview)
           </button>
-          <button 
-            className="btn btn-danger" 
+          <button
+            className="btn btn-danger"
             style={{ flex: 1 }}
             onClick={() => handlePrint('Z')}
             disabled={actualCashInput === ''}

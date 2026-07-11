@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import db from '../db/database';
+import { hashPassword } from '../utils/crypto';
 
 const AuthContext = createContext(null);
 
@@ -33,21 +34,34 @@ export function AuthProvider({ children }) {
         const userData = { id: data.id, username: data.username, name: data.name, role: data.role, token: data.token };
         setUser(userData);
         localStorage.setItem('buildpos_user', JSON.stringify(userData));
-        // Cache for offline use
-        await db.authCache.put({ id: data.id, username: data.username, passwordHash: password, role: data.role, name: data.name });
+        // Cache for offline use with securely hashed password
+        const hashedPassword = await hashPassword(password);
+        await db.authCache.put({ id: data.id, username: data.username, passwordHash: hashedPassword, role: data.role, name: data.name });
         return { success: true };
       }
     } catch {
       // Server unreachable — fall through to offline auth
     }
 
-    // Offline auth fallback
+    // Offline auth fallback (secure hash comparison)
+    const hashedAttempt = await hashPassword(password);
     const cached = await db.authCache.where('username').equals(username).first();
-    if (cached && cached.passwordHash === password) {
-      const userData = { id: cached.id, username: cached.username, name: cached.name, role: cached.role, token: null };
-      setUser(userData);
-      localStorage.setItem('buildpos_user', JSON.stringify(userData));
-      return { success: true };
+    
+    if (cached) {
+      if (cached.passwordHash === hashedAttempt) {
+        const userData = { id: cached.id, username: cached.username, name: cached.name, role: cached.role, token: null };
+        setUser(userData);
+        localStorage.setItem('buildpos_user', JSON.stringify(userData));
+        return { success: true };
+      }
+      // Seamless migration for legacy plaintext passwords
+      else if (cached.passwordHash === password) {
+        await db.authCache.update(cached.id, { passwordHash: hashedAttempt });
+        const userData = { id: cached.id, username: cached.username, name: cached.name, role: cached.role, token: null };
+        setUser(userData);
+        localStorage.setItem('buildpos_user', JSON.stringify(userData));
+        return { success: true };
+      }
     }
 
     return { success: false, error: 'Invalid username or password' };

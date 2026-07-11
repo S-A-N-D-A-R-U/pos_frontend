@@ -169,7 +169,7 @@ export default function ZReportsArchive() {
                 {report.variance === 0 ? 'Balanced' : (report.variance > 0 ? `+${formatCurrency(report.variance)}` : formatCurrency(report.variance))}
               </td>
               <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                <button 
+                <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handlePrintA4(report)}
                   style={{ gap: 6 }}

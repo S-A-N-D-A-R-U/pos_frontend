@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import db from './database';
+import { hashPassword } from '../utils/crypto';
 
 const CATEGORIES = [
   { id: uuidv4(), name: 'Cement & Binding', order: 1, icon: '🧱' },
@@ -111,18 +112,20 @@ export async function seedDatabase() {
   ]);
 
   // Seed default admin user (for offline auth)
+  const adminHash = await hashPassword('admin123');
   await db.authCache.put({
     id: 'default-admin',
     username: 'admin',
-    passwordHash: 'admin123', // In production, this should be a bcrypt hash
+    passwordHash: adminHash,
     role: 'admin',
     name: 'Administrator',
   });
 
+  const cashierHash = await hashPassword('cashier123');
   await db.authCache.put({
     id: 'default-cashier',
     username: 'cashier',
-    passwordHash: 'cashier123',
+    passwordHash: cashierHash,
     role: 'cashier',
     name: 'Cashier 1',
   });

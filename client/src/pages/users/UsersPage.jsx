@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import {
   Plus, Edit3, Trash2, X, Save, Users as UsersIcon, Shield, ShoppingCart,
 } from 'lucide-react';
+import { hashPassword } from '../../utils/crypto';
 
 export default function UsersPage() {
   const toast = useToast();
@@ -32,11 +33,16 @@ export default function UsersPage() {
       return;
     }
 
+    let finalPasswordHash = editUser?.passwordHash;
+    if (formData.password) {
+      finalPasswordHash = await hashPassword(formData.password);
+    }
+
     const data = {
       id: editUser?.id || uuidv4(),
       name: formData.name,
       username: formData.username,
-      passwordHash: formData.password || editUser?.passwordHash,
+      passwordHash: finalPasswordHash,
       role: formData.role,
     };
 

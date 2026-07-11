@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { formatCurrency, formatDateTime } from '../../utils/helpers';
 
 export default function ReceiptModal({ sale, onClose }) {
+  const printedRef = useRef(false);
 
   useEffect(() => {
-    if (!sale) return;
+    if (!sale || printedRef.current) return;
+    printedRef.current = true;
 
     const handlePrint = () => {
       const iframe = document.createElement('iframe');
@@ -25,112 +27,102 @@ export default function ReceiptModal({ sale, onClose }) {
           <title>Receipt - ${sale.receiptNumber}</title>
           <style>
             @page { margin: 0; size: 80mm auto; }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
               font-family: 'Courier New', Courier, monospace; 
-              font-size: 13px; 
+              font-size: 13px;
               width: 100%; 
               max-width: 280px; 
               padding: 10px; 
               margin: 0 auto; 
               color: #000;
               background: #fff;
-              -webkit-font-smoothing: none;
-              font-smooth: never;
-              text-rendering: optimizeSpeed;
               line-height: 1.2;
+              /* Fine-grained thickness control since Courier isn't a variable font */
+              -webkit-text-stroke: 0.25px #000;
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
             .line { border-top: 1px dashed #000; margin: 6px 0; }
-            table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-            th, td { text-align: right; vertical-align: top; }
-            th:first-child, td:first-child { text-align: left; padding-right: 4px; }
-            th { font-weight: normal; border-bottom: 1px dashed #000; padding-bottom: 4px; margin-bottom: 4px; }
-            .totals { width: 100%; display: flex; flex-direction: column; align-items: flex-end; margin-top: 4px; }
-            .totals-row { display: flex; justify-content: flex-end; gap: 8px; margin: 2px 0; }
+            .row { display: flex; justify-content: space-between; margin: 2px 0; }
+            .item-name { margin-bottom: 2px; }
+            .totals { width: 100%; display: flex; flex-direction: column; margin-top: 4px; }
           </style>
         </head>
         <body>
           <div class="center">
-            <div>BuildPOS Hardware</div>
-            <div>123 Construction Ave</div>
-            <div>Tel: (555) 123-4567</div>
+            <h2 class="bold" style="font-size: 16px; margin-bottom: 4px;">BuildPOS Hardware</h2>
+            <div style="font-size: 11px; margin-bottom: 8px;">Construction Materials & Supplies</div>
+            <div>Receipt: ${sale.receiptNumber}</div>
+            <div>${formatDateTime(sale.createdAt)}</div>
+            <div>Cashier: ${sale.cashierName || 'Administrator'}</div>
           </div>
-          <div class="line" style="margin-top: 8px;"></div>
-          <div>Receipt: ${sale.receiptNumber}</div>
-          <div>Date: ${new Date(sale.createdAt).toLocaleString()}</div>
-          <div>Cashier: ${sale.cashierName || 'Administrator'}</div>
-          ${sale.customerName ? `<div>Customer: ${sale.customerName}</div>` : ''}
+          
           <div class="line"></div>
           
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Ext</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sale.items.map(item => `
-                <tr>
-                  <td style="max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    ${item.productName.substring(0, 15)}
-                  </td>
-                  <td>${item.qty}</td>
-                  <td>${item.price.toFixed(2)}</td>
-                  <td>${item.subtotal.toFixed(2)}</td>
-                </tr>
+          <div class="items">
+            ${sale.items.map(item => `
+              <div style="margin-bottom: 6px;">
+                <div class="item-name">${item.productName}</div>
+                <div class="row">
+                  <div>${item.qty} x ${formatCurrency(item.price)}</div>
+                  <div>${formatCurrency(item.subtotal)}</div>
+                </div>
                 ${item.discountValue > 0 ? `
-                <tr>
-                  <td colspan="4" style="text-align: left; font-size: 11px; padding-left: 8px;">
-                    Disc: ${item.discountType === 'percentage' ? item.discountValue + '%' : formatCurrency(item.discountValue)}
-                  </td>
-                </tr>
+                  <div class="row" style="font-size: 11px;">
+                    <div>Disc (${item.discountType === 'percentage' ? item.discountValue + '%' : 'Fixed'})</div>
+                    <div>-${formatCurrency(item.discountAmount)}</div>
+                  </div>
                 ` : ''}
-              `).join('')}
-            </tbody>
-          </table>
-          
+              </div>
+            `).join('')}
+          </div>
+
           <div class="line"></div>
           
           <div class="totals">
-            <div class="totals-row">
-              <span>Subtotal:</span>
-              <span>${formatCurrency(sale.subtotal)}</span>
+            <div class="row">
+              <div>Subtotal</div>
+              <div>${formatCurrency(sale.subtotal)}</div>
             </div>
             ${sale.discountAmount > 0 ? `
-            <div class="totals-row">
-              <span>Overall Disc:</span>
-              <span>-${formatCurrency(sale.discountAmount)}</span>
-            </div>
+              <div class="row">
+                <div>Overall Discount</div>
+                <div>-${formatCurrency(sale.discountAmount)}</div>
+              </div>
             ` : ''}
-            <div class="totals-row bold" style="font-size: 15px; margin: 4px 0;">
-              <span>TOTAL:</span>
-              <span>${formatCurrency(sale.total)}</span>
+            <div class="row" style="margin-bottom: 4px;">
+              <div>Tax (0%)</div>
+              <div>${formatCurrency(0)}</div>
             </div>
-            <div class="totals-row">
-              <span>Paid (${sale.paymentMethod}):</span>
-              <span>${formatCurrency(sale.amountPaid)}</span>
+            
+            <div class="line"></div>
+            
+            <div class="row bold" style="font-size: 15px; margin: 4px 0;">
+              <div>TOTAL</div>
+              <div>${formatCurrency(sale.total)}</div>
             </div>
-            ${sale.balanceDue > 0 ? `
-            <div class="totals-row">
-              <span>Balance Due:</span>
-              <span>${formatCurrency(sale.balanceDue)}</span>
+            
+            <div class="line"></div>
+
+            <div class="row">
+              <div>Payment</div>
+              <div>${sale.paymentMethod.toUpperCase()}</div>
             </div>
-            ` : `
-            <div class="totals-row">
-              <span>Change:</span>
-              <span>${formatCurrency(sale.change)}</span>
+            <div class="row">
+              <div>Paid</div>
+              <div>${formatCurrency(sale.amountPaid)}</div>
             </div>
-            `}
+            <div class="row bold">
+              <div>${sale.balanceDue > 0 ? 'Balance Due' : 'Change'}</div>
+              <div>${formatCurrency(sale.balanceDue > 0 ? sale.balanceDue : sale.change)}</div>
+            </div>
           </div>
           
-          <div class="center" style="margin-top:20px;">
-            <div>Thank you for your business!</div>
-            <div>Please come again.</div>
+          <div class="line"></div>
+          
+          <div class="center" style="margin-top: 10px;">
+            <div class="bold" style="margin-bottom: 4px;">Thank you for your purchase!</div>
+            <div style="font-size: 10px;">Powered by BuildPOS</div>
           </div>
         </body>
         </html>
@@ -148,7 +140,8 @@ export default function ReceiptModal({ sale, onClose }) {
     };
 
     handlePrint();
-  }, [sale, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sale]);
 
   return null; // Headless component, renders no UI
 }

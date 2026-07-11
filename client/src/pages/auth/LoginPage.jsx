@@ -205,22 +205,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Demo credentials hint */}
-          <div style={{
-            marginTop: 24,
-            padding: 14,
-            background: 'var(--color-accent-50)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-accent-light)',
-          }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-accent)', marginBottom: 6 }}>
-              Demo Credentials
-            </p>
-            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-              <div><strong>Admin:</strong> admin / admin123</div>
-              <div><strong>Cashier:</strong> cashier / cashier123</div>
-            </div>
-          </div>
         </div>
 
         {/* Offline indicator */}
