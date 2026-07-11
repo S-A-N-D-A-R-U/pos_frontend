@@ -20,7 +20,7 @@ export default function ProductsPage() {
   const [showBarcodePrint, setShowBarcodePrint] = useState(null);
   const [editProduct, setEditProduct] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', category: '', price: '', costPrice: '', stock: '', unit: 'piece', sku: '', barcode: '', image: '', supplierId: '', variations: []
+    name: '', category: '', price: '', costPrice: '', stock: '', unit: 'piece', promptQuantity: false, sku: '', barcode: '', image: '', supplierId: '', variations: []
   });
 
   const products = useLiveQuery(() => db.products.toArray(), []);
@@ -44,6 +44,7 @@ export default function ProductsPage() {
         costPrice: String(product.costPrice),
         stock: String(product.stock),
         unit: product.unit,
+        promptQuantity: product.promptQuantity || false,
         sku: product.sku,
         barcode: product.barcode || '',
         image: product.image || '',
@@ -52,7 +53,7 @@ export default function ProductsPage() {
       });
     } else {
       setEditProduct(null);
-      setFormData({ name: '', category: categories?.[0]?.name || '', price: '', costPrice: '', stock: '', unit: 'piece', sku: '', barcode: '', image: '', supplierId: '', variations: [] });
+      setFormData({ name: '', category: categories?.[0]?.name || '', price: '', costPrice: '', stock: '', unit: 'piece', promptQuantity: false, sku: '', barcode: '', image: '', supplierId: '', variations: [] });
     }
     setShowForm(true);
   };
@@ -107,6 +108,7 @@ export default function ProductsPage() {
       costPrice: parseFloat(formData.costPrice) || 0,
       stock: parseInt(formData.stock),
       unit: formData.unit,
+      promptQuantity: formData.promptQuantity,
       sku: formData.sku,
       barcode: formData.barcode,
       image: formData.image,
@@ -218,7 +220,7 @@ export default function ProductsPage() {
                   <input className="input" type="number" style={{ padding: '12px 16px' }} placeholder="0.00" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Stock Quantity <span style={{color: 'var(--color-danger)'}}>*</span></label>
                   <input className="input" type="number" style={{ padding: '12px 16px' }} placeholder="0" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
@@ -226,12 +228,26 @@ export default function ProductsPage() {
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--color-text)' }}>Unit of Measure</label>
                   <select className="input" style={{ padding: '12px 16px' }} value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
-                    {['piece', 'kg', 'bag', 'roll', 'rod', 'sheet', 'tin', 'bucket', 'pair', 'box', 'cube', 'm'].map(u => (
+                    {['piece', 'kg', 'gram', 'bag', 'roll', 'rod', 'sheet', 'tin', 'bucket', 'pair', 'box', 'bundle', 'cube', 'm', 'yard', 'inches', 'sqft'].map(u => (
                       <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
                     ))}
                   </select>
                 </div>
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '12px 16px', background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={formData.promptQuantity} 
+                  onChange={e => setFormData({...formData, promptQuantity: e.target.checked})} 
+                  style={{ width: 18, height: 18, accentColor: 'var(--color-accent)' }} 
+                />
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  Prompt for exact quantity in POS
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2 }}>
+                    Checking this will immediately ask for quantity (e.g. for loose items) when added to cart.
+                  </div>
+                </div>
+              </label>
             </div>
 
             <div style={{ background: 'var(--color-bg-primary)', padding: 28, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>

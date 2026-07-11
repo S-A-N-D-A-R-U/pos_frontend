@@ -69,7 +69,7 @@ export default function POSPage() {
   const selectedCustomer = customers?.find(c => c.id === selectedCustomerId) || null;
 
   // Filter products
-  const products = allProducts?.filter(p => {
+  const products = (allProducts?.filter(p => {
     const matchCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const q = searchQuery.toLowerCase();
     
@@ -86,44 +86,80 @@ export default function POSPage() {
       ));
       
     return matchCategory && matchSearch;
-  }) || [];
+  }) || []).map(p => {
+    const cartQty = cart.filter(c => c.productId === p.id).reduce((sum, item) => sum + item.qty, 0);
+    const liveStock = Math.round((p.stock - cartQty) * 10000) / 10000;
+    return { ...p, stock: liveStock };
+  });
 
   // Cart operations
   const addToCart = useCallback((product, variant = null) => {
-    if (product.variations && product.variations.length > 0 && !variant) {
+    if (!product) return;
+    
+    if (product.variations?.length > 0 && !variant) {
       setShowVariationSelect(product);
       return;
     }
 
+    const targetStock = variant ? variant.stock : product.stock;
+    const price = variant && variant.price ? Number(variant.price) : product.price;
+    const itemName = variant ? `${product.name} - ${variant.name}` : product.name;
+
+    let targetItemId = null;
+    let currentQty = 1;
+
     setCart(prev => {
       const existing = prev.find(item => item.productId === product.id && item.variantId === (variant ? variant.id : null));
-      const targetStock = variant ? variant.stock : product.stock;
-      const price = variant && variant.price ? Number(variant.price) : product.price;
-      const itemName = variant ? `${product.name} - ${variant.name}` : product.name;
 
       if (existing) {
-        if (existing.qty >= targetStock) {
+        targetItemId = existing.id;
+        currentQty = existing.qty;
+        if (existing.qty >= targetStock && !product.promptQuantity) {
           toast.warning('Not enough stock');
           return prev;
         }
+        
+        // If promptQuantity is true, we just return the existing state and let the numpad handle it
+        if (product.promptQuantity) {
+          return prev;
+        }
+
         return prev.map(item =>
           item.id === existing.id
             ? { ...item, qty: item.qty + 1, subtotal: (item.qty + 1) * item.price }
             : item
         );
       }
-      return [...prev, {
-        id: uuidv4(),
+      
+      targetItemId = uuidv4();
+      const newItem = {
+        id: targetItemId,
         productId: product.id,
         variantId: variant ? variant.id : null,
         productName: itemName,
         price: price,
-        qty: 1,
-        subtotal: price,
+        qty: product.promptQuantity ? 0 : 1,
+        subtotal: product.promptQuantity ? 0 : price,
         unit: product.unit,
         stock: targetStock,
-      }];
+      };
+      
+      currentQty = newItem.qty;
+      return [...prev, newItem];
     });
+
+    // Queue the numpad pop-up after the cart has rendered the new item
+    if (product.promptQuantity) {
+      setTimeout(() => {
+        setShowNumPad({
+          id: targetItemId,
+          productName: itemName,
+          qty: currentQty,
+          unit: product.unit,
+          stock: targetStock
+        });
+      }, 0);
+    }
   }, [toast]);
 
   const findMatch = (bcode) => {
@@ -162,49 +198,104 @@ export default function POSPage() {
     }
   }, [products, addToCart, toast]);
 
-  // Keep a stable reference to the latest callback to prevent listener rebuilding
+  // Keep stable references for shortcuts to avoid recreating listener
+  const stateRefs = useRef({ cart, showPayment, showVariationSelect, showNumPad });
+  useEffect(() => {
+    stateRefs.current = { cart, showPayment, showVariationSelect, showNumPad };
+  }, [cart, showPayment, showVariationSelect, showNumPad]);
+
   const handleBarcodeScannedRef = useRef(handleBarcodeScanned);
   useEffect(() => {
     handleBarcodeScannedRef.current = handleBarcodeScanned;
   }, [handleBarcodeScanned]);
 
-  // Barcode scanner listener (detects rapid keystrokes)
+  // Global Shortcuts & Barcode scanner listener
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ignore if typing in an input
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      const state = stateRefs.current;
+      
+      // Global Escape
+      if (e.key === 'Escape') {
+        if (state.showVariationSelect) {
+          setShowVariationSelect(null);
+          return;
+        }
+        if (state.showNumPad) {
+          setShowNumPad(null);
+          return;
+        }
+        if (state.showPayment) {
+          setShowPayment(false);
+          return;
+        }
+        if (state.cart.length > 0) {
+          setCart([]);
+          // Assuming toast is available in scope. Since we don't have it in refs, we can rely on standard setCart
+          return;
+        }
+      }
 
-      if (e.key === 'Enter' && barcodeBuffer.current.length >= 5) {
-        const barcode = barcodeBuffer.current;
-        barcodeBuffer.current = '';
-        handleBarcodeScannedRef.current(barcode);
+      // Global Search
+      if (e.key === 'F2') {
+        e.preventDefault();
+        document.getElementById('pos-search')?.focus();
         return;
       }
 
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        barcodeBuffer.current += e.key;
-        clearTimeout(barcodeTimeout.current);
-        barcodeTimeout.current = setTimeout(() => {
+      // Ignore standard typing if we are in an input, UNLESS it's Enter in the search bar
+      if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Enter') return;
+
+      if (e.key === 'Enter') {
+        if (barcodeBuffer.current.length >= 5) {
+          const barcode = barcodeBuffer.current;
           barcodeBuffer.current = '';
-        }, 100); // Reset if gap between keystrokes > 100ms
+          handleBarcodeScannedRef.current(barcode);
+          return;
+        } else if (!state.showPayment && !state.showVariationSelect && !state.showNumPad && state.cart.length > 0) {
+          e.preventDefault(); // Prevent accidental form submissions if in input
+          setShowPayment(true);
+          return;
+        }
+      }
+
+      // Only build barcode buffer if not typing in an input
+      if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          barcodeBuffer.current += e.key;
+          clearTimeout(barcodeTimeout.current);
+          barcodeTimeout.current = setTimeout(() => {
+            barcodeBuffer.current = '';
+          }, 100);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []); // Empty dependency array prevents stuttering
+  }, []);
 
   const updateQty = useCallback((itemId, newQty) => {
     if (newQty <= 0) {
       setCart(prev => prev.filter(item => item.id !== itemId));
       return;
     }
-    setCart(prev => prev.map(item =>
-      item.id === itemId
-        ? { ...item, qty: newQty, subtotal: newQty * item.price }
-        : item
-    ));
-  }, []);
+    setCart(prev => prev.map(item => {
+      if (item.id === itemId) {
+        let roundedQty = Math.round(newQty * 10000) / 10000;
+        
+        // Stock limit guard
+        // Note: item.stock inside cart is the *initial* targetStock when it was added, 
+        // which represents the total DB stock.
+        if (roundedQty > item.stock) {
+          toast.warning(`Cannot exceed available stock (${item.stock} ${item.unit})`);
+          roundedQty = item.stock;
+        }
+
+        return { ...item, qty: roundedQty, subtotal: roundedQty * item.price };
+      }
+      return item;
+    }));
+  }, [toast]);
 
   const removeFromCart = useCallback((itemId) => {
     setCart(prev => prev.filter(item => item.id !== itemId));
@@ -244,7 +335,7 @@ export default function POSPage() {
   }, [cart, holdOrder, toast]);
 
   // Complete sale
-  const completeSale = useCallback(async (paymentMethod, amountPaid) => {
+  const completeSale = useCallback(async (paymentMethod, amountPaid, printReceipt) => {
     const saleId = uuidv4();
     const receiptNumber = generateReceiptNumber();
     const total = cart.reduce((sum, item) => sum + item.subtotal, 0);
@@ -288,9 +379,10 @@ export default function POSPage() {
     }));
     await db.saleItems.bulkPut(saleItems);
 
-    // Update product stock
+    // Update product stock and sync
     for (const item of cart) {
-      await db.products.where('id').equals(item.productId).modify(p => {
+      const p = await db.products.get(item.productId);
+      if (p) {
         if (item.variantId && p.variations) {
           const v = p.variations.find(v => v.id === item.variantId);
           if (v) {
@@ -300,7 +392,10 @@ export default function POSPage() {
           p.stock = Math.max(0, (p.stock || 0) - item.qty);
         }
         p.updatedAt = new Date().toISOString();
-      });
+        p.syncStatus = 'pending';
+        await db.products.put(p);
+        await pushToOutbox('product', p.id, 'update', p);
+      }
     }
 
     // Queue for sync
@@ -310,7 +405,9 @@ export default function POSPage() {
     setCart([]);
     setSelectedCustomerId('');
     setShowPayment(false);
-    setShowReceipt(true);
+    if (printReceipt) {
+      setShowReceipt(true);
+    }
     toast.success('Sale completed!');
   }, [cart, user, pushToOutbox, toast, selectedCustomer]);
 
@@ -351,8 +448,65 @@ export default function POSPage() {
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* LEFT: Product Grid */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        
+        {/* LEFT: Vertical Categories Sidebar */}
+        <div style={{
+          width: 110,
+          background: 'var(--color-bg-secondary)',
+          borderRight: '1px solid var(--color-border)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflowY: 'auto',
+          padding: '12px 8px',
+          gap: 8,
+          flexShrink: 0,
+        }}>
+          <button
+            className={`btn ${selectedCategory === 'All' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setSelectedCategory('All')}
+            style={{ 
+              fontSize: 12, 
+              padding: '12px 8px', 
+              minHeight: 48, 
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              fontWeight: 600,
+              whiteSpace: 'normal',
+              wordWrap: 'break-word',
+            }}
+          >
+            All
+          </button>
+          {categories?.map(cat => (
+            <button
+              key={cat.id}
+              className={`btn ${selectedCategory === cat.name ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setSelectedCategory(cat.name)}
+              style={{
+                fontSize: 12, 
+                padding: '12px 8px', 
+                minHeight: 48, 
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                fontWeight: 600,
+                lineHeight: 1.2,
+                whiteSpace: 'normal',
+                wordWrap: 'break-word',
+              }}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+
+        {/* CENTER: Product Grid */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {/* Search Bar */}
         <div style={{
           padding: '16px 20px',
@@ -406,40 +560,6 @@ export default function POSPage() {
           </button>
         </div>
 
-        {/* Category Tabs */}
-        <div style={{
-          padding: '10px 20px',
-          background: 'var(--color-bg-secondary)',
-          borderBottom: '1px solid var(--color-border)',
-          display: 'flex',
-          gap: 6,
-          overflowX: 'auto',
-          flexShrink: 0,
-        }}>
-          <button
-            className={`btn ${selectedCategory === 'All' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setSelectedCategory('All')}
-            style={{ fontSize: 13, padding: '8px 16px', minHeight: 38, borderRadius: 'var(--radius-full)' }}
-          >
-            All
-          </button>
-          {categories?.map(cat => (
-            <button
-              key={cat.id}
-              className={`btn ${selectedCategory === cat.name ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setSelectedCategory(cat.name)}
-              style={{
-                fontSize: 13,
-                padding: '8px 16px',
-                minHeight: 38,
-                borderRadius: 'var(--radius-full)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span>{cat.icon}</span> {cat.name}
-            </button>
-          ))}
-        </div>
 
         {/* Product Grid */}
         <div style={{
@@ -588,7 +708,7 @@ export default function POSPage() {
 
       {/* RIGHT: Cart / Order Panel */}
       <div style={{
-        width: 380,
+        width: 450,
         background: 'var(--color-bg-secondary)',
         borderLeft: '1px solid var(--color-border)',
         display: 'flex',
@@ -596,7 +716,7 @@ export default function POSPage() {
         flexShrink: 0,
       }}>
         {/* Customer Selector */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
           <select 
              className="input" 
              value={selectedCustomerId} 
@@ -793,6 +913,14 @@ export default function POSPage() {
       </div>
 
       {/* Modals */}
+      {showPayment && (
+        <PaymentModal
+          total={total}
+          selectedCustomer={selectedCustomer}
+          onComplete={completeSale}
+          onClose={() => setShowPayment(false)}
+        />
+      )}
       {showVariationSelect && (
         <VariationSelectModal
           product={showVariationSelect}
@@ -803,14 +931,7 @@ export default function POSPage() {
           }}
         />
       )}
-      {showPayment && (
-        <PaymentModal
-          total={total}
-          selectedCustomer={selectedCustomer}
-          onComplete={completeSale}
-          onClose={() => setShowPayment(false)}
-        />
-      )}
+
       {showReceipt && lastSale && (
         <ReceiptModal
           sale={lastSale}

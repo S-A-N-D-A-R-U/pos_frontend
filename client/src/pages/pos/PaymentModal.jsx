@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { formatCurrency, calculateChange } from '../../utils/helpers';
 import { X, CreditCard, Banknote, Check } from 'lucide-react';
 
@@ -20,16 +20,34 @@ export default function PaymentModal({ total, onComplete, onClose, selectedCusto
     Math.ceil(total / 5000) * 5000,
   ].filter((v, i, a) => a.indexOf(v) === i && v >= total).slice(0, 4);
 
-  const handleComplete = () => {
+  const handleComplete = useCallback((printReceipt) => {
     if (canComplete) {
       let finalMethod = method;
       if (selectedCustomer && method === 'cash') {
         if (paid === 0) finalMethod = 'credit';
         else if (paid < total) finalMethod = 'mixed';
       }
-      onComplete(finalMethod, method === 'card' ? total : paid);
+      onComplete(finalMethod, method === 'card' ? total : paid, printReceipt);
     }
-  };
+  }, [canComplete, method, paid, total, selectedCustomer, onComplete]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const printReceipt = !e.shiftKey;
+        if (canComplete) {
+          handleComplete(printReceipt);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canComplete, handleComplete, onClose]);
 
   const handleNumPad = (val) => {
     if (val === 'C') {
@@ -48,15 +66,16 @@ export default function PaymentModal({ total, onComplete, onClose, selectedCusto
       <div
         className="modal animate-scale-in"
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 480, padding: 0 }}
+        style={{ width: '100%', maxWidth: 700, padding: 0 }}
       >
         {/* Header */}
         <div style={{
-          padding: '20px 24px',
+          padding: '16px 20px',
           borderBottom: '1px solid var(--color-border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          background: 'var(--color-bg-primary)',
         }}>
           <h2 style={{ fontSize: 18, fontWeight: 700 }}>Payment</h2>
           <button onClick={onClose} className="btn btn-ghost btn-icon" style={{ minWidth: 36, minHeight: 36, padding: 0 }}>
@@ -64,69 +83,84 @@ export default function PaymentModal({ total, onComplete, onClose, selectedCusto
           </button>
         </div>
 
-        <div style={{ padding: '20px 24px' }}>
-          {/* Total */}
-          <div style={{
-            textAlign: 'center',
-            padding: '20px 0',
-            marginBottom: 20,
-          }}>
-            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 4 }}>Total Amount</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--color-accent)' }}>
-              {formatCurrency(total)}
+        <div style={{ padding: '12px 20px' }}>
+        {/* Total */}
+        <div style={{
+          textAlign: 'center',
+          marginBottom: 12,
+        }}>
+          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 2 }}>Total Amount</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--color-accent)' }}>
+            {formatCurrency(total)}
+          </div>
+        </div>
+
+        {/* Payment Method */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <button
+            onClick={() => setMethod('cash')}
+            style={{
+              flex: 1,
+              padding: '10px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: `2px solid ${method === 'cash' ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              background: method === 'cash' ? 'var(--color-accent-light)' : 'var(--color-bg-primary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              fontWeight: 600,
+              fontSize: 14,
+              color: method === 'cash' ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+            }}
+          >
+            <Banknote size={18} /> Cash
+          </button>
+          <button
+            onClick={() => setMethod('card')}
+            style={{
+              flex: 1,
+              padding: '10px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: `2px solid ${method === 'card' ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              background: method === 'card' ? 'var(--color-accent-light)' : 'var(--color-bg-primary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              fontWeight: 600,
+              fontSize: 14,
+              color: method === 'card' ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+            }}
+          >
+            <CreditCard size={18} /> Card
+          </button>
+        </div>
+
+        {method === 'cash' && (
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+            {/* Left Side: NumPad */}
+            <div style={{ flex: '0 0 280px' }}>
+              <div className="numpad-grid" style={{ gap: 6 }}>
+                {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
+                  <button
+                    key={key}
+                    className="numpad-btn"
+                    onClick={() => handleNumPad(key)}
+                    style={{ minHeight: 48, fontSize: 18 }}
+                  >
+                    {key}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Payment Method */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-            <button
-              onClick={() => setMethod('cash')}
-              style={{
-                flex: 1,
-                padding: '14px 16px',
-                borderRadius: 'var(--radius-lg)',
-                border: `2px solid ${method === 'cash' ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                background: method === 'cash' ? 'var(--color-accent-light)' : 'var(--color-bg-primary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontWeight: 600,
-                fontSize: 14,
-                color: method === 'cash' ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                transition: 'all 0.15s',
-              }}
-            >
-              <Banknote size={20} /> Cash
-            </button>
-            <button
-              onClick={() => setMethod('card')}
-              style={{
-                flex: 1,
-                padding: '14px 16px',
-                borderRadius: 'var(--radius-lg)',
-                border: `2px solid ${method === 'card' ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                background: method === 'card' ? 'var(--color-accent-light)' : 'var(--color-bg-primary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontWeight: 600,
-                fontSize: 14,
-                color: method === 'card' ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                transition: 'all 0.15s',
-              }}
-            >
-              <CreditCard size={20} /> Card
-            </button>
-          </div>
-
-          {method === 'cash' && (
-            <>
+            {/* Right Side: Inputs and Info */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Quick Amount Buttons */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
                 {quickAmounts.map(amt => (
                   <button
                     key={amt}
@@ -134,8 +168,8 @@ export default function PaymentModal({ total, onComplete, onClose, selectedCusto
                     className="btn btn-secondary"
                     style={{
                       fontSize: 13,
-                      padding: '10px 8px',
-                      minHeight: 42,
+                      padding: '8px',
+                      minHeight: 40,
                       fontWeight: 600,
                       background: paid === amt ? 'var(--color-accent-light)' : undefined,
                       borderColor: paid === amt ? 'var(--color-accent)' : undefined,
@@ -148,8 +182,8 @@ export default function PaymentModal({ total, onComplete, onClose, selectedCusto
               </div>
 
               {/* Amount Input */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 4 }}>
                   Amount Received
                 </label>
                 <input
@@ -159,87 +193,98 @@ export default function PaymentModal({ total, onComplete, onClose, selectedCusto
                   value={amountPaid}
                   onChange={e => setAmountPaid(e.target.value.replace(/[^0-9.]/g, ''))}
                   placeholder="0.00"
-                  style={{ fontSize: 24, fontWeight: 700, textAlign: 'center' }}
+                  style={{ fontSize: 24, fontWeight: 700, textAlign: 'center', height: 48, minHeight: 48 }}
                   autoFocus
                 />
-              </div>
-
-              {/* NumPad */}
-              <div className="numpad-grid" style={{ marginBottom: 16 }}>
-                {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
-                  <button
-                    key={key}
-                    className="numpad-btn"
-                    onClick={() => handleNumPad(key)}
-                  >
-                    {key}
-                  </button>
-                ))}
               </div>
 
               {/* Change or Balance Due Display */}
               {paid > total ? (
                 <div className="animate-fade-in" style={{
-                  padding: 16,
+                  padding: 12,
                   background: 'var(--color-success-light)',
-                  borderRadius: 'var(--radius-lg)',
+                  borderRadius: 'var(--radius-md)',
                   textAlign: 'center',
-                  marginBottom: 16,
                   border: '1px solid rgba(16,185,129,0.2)',
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#065f46', marginBottom: 4 }}>Change</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--color-success)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#065f46', marginBottom: 2 }}>Change</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-success)' }}>
                     {formatCurrency(change)}
                   </div>
                 </div>
               ) : paid < total && selectedCustomer ? (
                 <div className="animate-fade-in" style={{
-                  padding: 16,
+                  padding: 12,
                   background: 'var(--color-warning-light)',
-                  borderRadius: 'var(--radius-lg)',
+                  borderRadius: 'var(--radius-md)',
                   textAlign: 'center',
-                  marginBottom: 16,
                   border: '1px solid rgba(245,158,11,0.2)',
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>Balance Due (Credit)</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--color-warning)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 2 }}>Balance Due (Credit)</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-warning)' }}>
                     {formatCurrency(balanceDue)}
                   </div>
                 </div>
               ) : null}
-            </>
-          )}
-
-          {method === 'card' && (
-            <div style={{
-              padding: 24,
-              background: 'var(--color-bg-primary)',
-              borderRadius: 'var(--radius-lg)',
-              textAlign: 'center',
-              marginBottom: 16,
-              border: '1px solid var(--color-border)',
-            }}>
-              <CreditCard size={40} style={{ color: 'var(--color-accent)', marginBottom: 12 }} />
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Card Payment</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                Process card payment on your terminal
-              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Complete Button */}
+        {method === 'card' && (
+          <div style={{
+            padding: 24,
+            background: 'var(--color-bg-primary)',
+            borderRadius: 'var(--radius-lg)',
+            textAlign: 'center',
+            marginBottom: 16,
+            border: '1px solid var(--color-border)',
+          }}>
+            <CreditCard size={40} style={{ color: 'var(--color-accent)', margin: '0 auto 12px' }} />
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Card Payment</div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+              Process card payment on your terminal
+            </div>
+          </div>
+        )}
+        </div>
+
+        {/* Footer / Complete Buttons */}
+        <div style={{
+          padding: '12px 20px',
+          borderTop: '1px solid var(--color-border)',
+          background: 'var(--color-bg-primary)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          borderBottomLeftRadius: 'var(--radius-xl)',
+          borderBottomRightRadius: 'var(--radius-xl)',
+        }}>
           <button
-            id="payment-complete-btn"
-            className="btn btn-success btn-xl"
-            onClick={handleComplete}
+            className="btn btn-success"
+            onClick={() => handleComplete(true)}
             disabled={!canComplete}
             style={{
               width: '100%',
+              minHeight: 48,
+              fontSize: 15,
               opacity: canComplete ? 1 : 0.5,
             }}
           >
-            <Check size={20} />
-            Complete Sale
+            <Check size={18} />
+            Complete & Print Receipt
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => handleComplete(false)}
+            disabled={!canComplete}
+            style={{
+              width: '100%',
+              minHeight: 44,
+              fontSize: 14,
+              opacity: canComplete ? 1 : 0.5,
+            }}
+          >
+            Complete (No Receipt)
           </button>
         </div>
       </div>
