@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import db from '../../db/database';
 import { formatCurrency, formatDateTime } from '../../utils/helpers';
 
 export default function ReceiptModal({ sale, onClose }) {
@@ -8,7 +9,27 @@ export default function ReceiptModal({ sale, onClose }) {
     if (!sale || printedRef.current) return;
     printedRef.current = true;
 
-    const handlePrint = () => {
+    const generateAndPrint = async () => {
+      let storeName = 'BuildPOS Hardware';
+      let storeAddress = '';
+      let storePhone = '';
+      let receiptFooter = 'Thank you for your purchase!';
+
+      try {
+        const nameSetting = await db.settings.get('storeName');
+        const addrSetting = await db.settings.get('storeAddress');
+        const phoneSetting = await db.settings.get('storePhone');
+        const footerSetting = await db.settings.get('receiptFooter');
+
+        if (nameSetting?.value) storeName = nameSetting.value;
+        if (addrSetting?.value) storeAddress = addrSetting.value;
+        if (phoneSetting?.value) storePhone = phoneSetting.value;
+        if (footerSetting?.value) receiptFooter = footerSetting.value;
+      } catch (err) {
+        console.error("Failed to load settings for receipt", err);
+      }
+
+      const handlePrint = () => {
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.right = '0';
@@ -50,8 +71,10 @@ export default function ReceiptModal({ sale, onClose }) {
         </head>
         <body>
           <div class="center">
-            <h2 class="bold" style="font-size: 16px; margin-bottom: 4px;">BuildPOS Hardware</h2>
-            <div style="font-size: 11px; margin-bottom: 8px;">Construction Materials & Supplies</div>
+            <h2 class="bold" style="font-size: 16px; margin-bottom: 4px;">${storeName}</h2>
+            ${storeAddress ? `<div style="font-size: 11px; margin-bottom: 2px;">${storeAddress}</div>` : ''}
+            ${storePhone ? `<div style="font-size: 11px; margin-bottom: 8px;">${storePhone}</div>` : ''}
+            ${!storeAddress && !storePhone ? `<div style="font-size: 11px; margin-bottom: 8px;"></div>` : ''}
             <div>Receipt: ${sale.receiptNumber}</div>
             <div>${formatDateTime(sale.createdAt)}</div>
             <div>Cashier: ${sale.cashierName || 'Administrator'}</div>
@@ -121,7 +144,7 @@ export default function ReceiptModal({ sale, onClose }) {
           <div class="line"></div>
           
           <div class="center" style="margin-top: 10px;">
-            <div class="bold" style="margin-bottom: 4px;">Thank you for your purchase!</div>
+            <div class="bold" style="margin-bottom: 4px;">${receiptFooter}</div>
             <div style="font-size: 10px;">Powered by BuildPOS</div>
           </div>
         </body>
@@ -139,7 +162,7 @@ export default function ReceiptModal({ sale, onClose }) {
       }, 250);
     };
 
-    handlePrint();
+    generateAndPrint();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sale]);
 
