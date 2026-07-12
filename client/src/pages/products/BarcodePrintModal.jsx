@@ -34,6 +34,8 @@ export default function BarcodePrintModal({ product, onClose }) {
     let pageCss = '';
     if (labelSize === '50x25') {
       pageCss = `@page { size: 50mm 25mm; margin: 0; } .label { width: 50mm; height: 25mm; padding: 1mm; }`;
+    } else if (labelSize === '60x40') {
+      pageCss = `@page { size: 60mm 40mm; margin: 0; } .label { width: 60mm; height: 40mm; padding: 1.5mm; } .product-name { font-size: 12px !important; } .price { font-size: 14px !important; }`;
     } else if (labelSize === '80x40') {
       pageCss = `@page { size: 80mm 40mm; margin: 0; } .label { width: 80mm; height: 40mm; padding: 2mm; } .product-name { font-size: 14px !important; } .price { font-size: 16px !important; }`;
     }
