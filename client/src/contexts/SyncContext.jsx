@@ -61,10 +61,15 @@ export function SyncProvider({ children }) {
     if (!isOnline || isSyncing) return;
     setIsSyncing(true);
     try {
+      const user = JSON.parse(localStorage.getItem('buildpos_user') || '{}');
+      if (!user.token) {
+        setIsSyncing(false);
+        return; // Don't attempt to sync if we don't have a valid online session token
+      }
+
       // Push pending changes
       const pending = await db.syncOutbox.where('status').equals('pending').toArray();
       if (pending.length > 0) {
-        const user = JSON.parse(localStorage.getItem('buildpos_user') || '{}');
         const res = await apiFetch('/api/sync/push', {
           method: 'POST',
           headers: {
@@ -92,7 +97,6 @@ export function SyncProvider({ children }) {
       }
 
       // Pull latest changes
-      const user = JSON.parse(localStorage.getItem('buildpos_user') || '{}');
       const lastSync = lastSyncAt || '1970-01-01T00:00:00.000Z';
       const res = await apiFetch(`/api/sync/pull?since=${encodeURIComponent(lastSync)}`, {
         headers: { 'Authorization': `Bearer ${user.token}` },

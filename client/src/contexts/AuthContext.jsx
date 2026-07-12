@@ -23,26 +23,26 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (username, password) => {
-    // Try online auth first
-    try {
-      const res = await apiFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const userData = { id: data.id, username: data.username, name: data.name, role: data.role, token: data.token };
-        setUser(userData);
-        localStorage.setItem('buildpos_user', JSON.stringify(userData));
-        // Cache for offline use with securely hashed password
-        const hashedPassword = await hashPassword(password);
-        await db.authCache.put({ id: data.id, username: data.username, passwordHash: hashedPassword, role: data.role, name: data.name });
-        return { success: true };
-      }
-    } catch {
-      // Server unreachable — fall through to offline auth
-    }
+    // --- TEMPORARILY DISABLED ONLINE AUTH ---
+    // try {
+    //   const res = await apiFetch('/api/auth/login', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ username, password }),
+    //   });
+    //   if (res.ok) {
+    //     const data = await res.json();
+    //     const userData = { id: data.id, username: data.username, name: data.name, role: data.role, token: data.token };
+    //     setUser(userData);
+    //     localStorage.setItem('buildpos_user', JSON.stringify(userData));
+    //     // Cache for offline use with securely hashed password
+    //     const hashedPassword = await hashPassword(password);
+    //     await db.authCache.put({ id: data.id, username: data.username, passwordHash: hashedPassword, role: data.role, name: data.name });
+    //     return { success: true };
+    //   }
+    // } catch {
+    //   // Server unreachable — fall through to offline auth
+    // }
 
     // Offline auth fallback (secure hash comparison)
     const hashedAttempt = await hashPassword(password);
