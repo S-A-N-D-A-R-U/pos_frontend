@@ -23,6 +23,8 @@ router.post('/push', authenticate, async (req, res) => {
         if (change.entity === 'sale') {
           if (change.operation === 'create' || change.operation === 'update') {
             await Sale.findByIdAndUpdate(change.entityId, change.data, { upsert: true, new: true });
+          } else if (change.operation === 'delete') {
+            await Sale.findByIdAndDelete(change.entityId);
           }
           results.push({ id: change.id, status: 'ok' });
         } else if (change.entity === 'product') {

@@ -2,9 +2,14 @@ import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/database';
 import { formatCurrency, formatDateTime } from '../../utils/helpers';
-import { Search, Calendar, FileText, Filter } from 'lucide-react';
+import { Search, Calendar, FileText, Filter, Trash2 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 
 export default function SalesPage() {
+  const { isAdmin } = useAuth();
+  const toast = useToast();
+  
   const [search, setSearch] = useState('');
   
   // Default to today
@@ -44,6 +49,51 @@ export default function SalesPage() {
   const totalRevenue = filteredSales.reduce((sum, s) => sum + s.total, 0);
   const totalReceived = filteredSales.reduce((sum, s) => sum + (s.amountPaid || 0), 0);
   const totalOutstanding = filteredSales.reduce((sum, s) => sum + (s.balanceDue || 0), 0);
+
+  const handleDeleteSale = async (sale) => {
+    if (!window.confirm(`Are you sure you want to delete receipt ${sale.receiptNumber}? This will restore the inventory and cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Restore stock for all items
+      if (sale.items && sale.items.length > 0) {
+        for (const item of sale.items) {
+          const product = await db.products.get(item.productId);
+          if (product) {
+            const newStock = (product.stock || 0) + item.qty;
+            await db.products.update(product.id, { stock: newStock, updatedAt: new Date().toISOString(), syncStatus: 'pending' });
+            
+            await db.syncOutbox.add({
+              entity: 'product',
+              entityId: product.id,
+              operation: 'update',
+              data: { stock: newStock },
+              createdAt: new Date().toISOString(),
+              status: 'pending'
+            });
+          }
+        }
+      }
+
+      // Delete the sale
+      await db.sales.delete(sale.id);
+      
+      // Queue sync deletion
+      await db.syncOutbox.add({
+        entity: 'sale',
+        entityId: sale.id,
+        operation: 'delete',
+        createdAt: new Date().toISOString(),
+        status: 'pending'
+      });
+
+      toast.success('Sale deleted successfully and inventory restored');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete sale');
+    }
+  };
 
   return (
     <div style={{ padding: 28, maxWidth: 1400, margin: '0 auto' }} className="animate-fade-in">
@@ -130,12 +180,13 @@ export default function SalesPage() {
               <th style={{ textAlign: 'right' }}>Total</th>
               <th style={{ textAlign: 'right' }}>Balance Due</th>
               <th style={{ textAlign: 'center' }}>Status</th>
+              {isAdmin && <th style={{ textAlign: 'center', width: 60 }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filteredSales.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: 60, color: 'var(--color-text-muted)' }}>
+                <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', padding: 60, color: 'var(--color-text-muted)' }}>
                   <FileText size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
                   <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>No sales found</div>
                   <div style={{ fontSize: 13 }}>Try adjusting your date range or filters</div>
@@ -168,6 +219,31 @@ export default function SalesPage() {
                       <span className="badge badge-success">Paid</span>
                     )}
                   </td>
+                  {isAdmin && (
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleDeleteSale(sale)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--color-danger)',
+                          cursor: 'pointer',
+                          padding: 6,
+                          borderRadius: 'var(--radius-sm)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: 0.7,
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
+                        title="Delete Sale"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
