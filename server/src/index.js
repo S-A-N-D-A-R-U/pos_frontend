@@ -37,7 +37,7 @@ async function connectDB() {
     const userCount = await User.countDocuments();
     if (userCount === 0) {
       console.log('No users found in DB. Creating default admin...');
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+      const hashedPassword = await bcrypt.hash('Admin@BuildPOS!', 10);
       await User.create({
         _id: 'default-admin',
         username: 'admin',
@@ -45,7 +45,7 @@ async function connectDB() {
         name: 'Administrator',
         role: 'admin'
       });
-      console.log('✅ Default admin created (admin / admin123)');
+      console.log('✅ Default admin created (admin / Admin@BuildPOS!)');
     }
   } catch (err) {
     console.warn('⚠️  MongoDB not connected (running without database):', err.message);

@@ -112,7 +112,7 @@ export async function seedDatabase() {
   ]);
 
   // Seed default admin user (for offline auth)
-  const adminHash = await hashPassword('admin123');
+  const adminHash = await hashPassword('Admin@BuildPOS!');
   await db.authCache.put({
     id: 'default-admin',
     username: 'admin',
