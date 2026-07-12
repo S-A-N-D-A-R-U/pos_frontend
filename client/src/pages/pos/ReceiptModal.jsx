@@ -10,9 +10,9 @@ export default function ReceiptModal({ sale, onClose }) {
     printedRef.current = true;
 
     const generateAndPrint = async () => {
-      let storeName = 'BuildPOS Hardware';
-      let storeAddress = '';
-      let storePhone = '';
+      let storeName = 'ONITHA HARDWARE';
+      let storeAddress = 'Waskaduwa';
+      let storePhone = '077 3712157';
       let receiptFooter = 'Thank you for your purchase!';
 
       try {
@@ -29,7 +29,6 @@ export default function ReceiptModal({ sale, onClose }) {
         console.error("Failed to load settings for receipt", err);
       }
 
-      const handlePrint = () => {
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.right = '0';
