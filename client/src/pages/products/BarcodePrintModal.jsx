@@ -65,7 +65,7 @@ export default function BarcodePrintModal({ product, onClose }) {
             font-size: 12px; font-weight: 800; margin-top: 2px; 
           }
           .barcode-wrapper {
-            display: flex; justify-content: center; align-items: center; width: 100%; flex: 1; min-height: 0;
+            display: flex; justify-content: center; align-items: center; width: 100%;
           }
           .barcode-wrapper svg {
             max-width: 100%; max-height: 100%; height: auto; display: block;
