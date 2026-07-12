@@ -94,7 +94,7 @@ export function SyncProvider({ children }) {
       // Pull latest changes
       const user = JSON.parse(localStorage.getItem('buildpos_user') || '{}');
       const lastSync = lastSyncAt || '1970-01-01T00:00:00.000Z';
-      const res = await fetch(`/api/sync/pull?since=${encodeURIComponent(lastSync)}`, {
+      const res = await apiFetch(`/api/sync/pull?since=${encodeURIComponent(lastSync)}`, {
         headers: { 'Authorization': `Bearer ${user.token}` },
       });
       if (res.status === 401) {
